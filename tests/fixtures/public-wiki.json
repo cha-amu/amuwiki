@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-07T00:00:00.000Z",
+  "documents": [
+    {
+      "id": "읽기/기록?#%한글",
+      "title": "읽기에서 이어지는 생각",
+      "kind": "concept",
+      "tags": ["읽기", "연결"],
+      "body": "이 문서는 화면과 동작을 검수하기 위한 가상 기록입니다. 실제 개인 기록을 사용하지 않았습니다.\n\n## 작은 기록\n\n읽은 내용에서 질문을 꺼내고, 다시 살펴볼 문장과 생각을 한곳에 모읍니다. 문서 사이의 연결을 따라가면 같은 주제를 다른 방향에서 바라볼 수 있습니다.\n\n[같은 문단으로](#작은-기록) · [다음 문서](doc:%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%3Aa%26b)\n\n> 생각이 머무른 자리에 짧은 기록을 남깁니다.\n\n## 기록을 잇는 방법\n\n- 출처를 함께 남기기\n- 관련 있는 문서를 직접 연결하기\n- 떠오른 질문을 따로 기록하기\n\n| 기록 | 이어지는 곳 |\n| --- | --- |\n| 읽은 문장 | 출처와 개념 |\n| 만든 것 | 프로젝트와 결정 |\n\n### 돌아와서 읽기\n\n오래된 기록을 다시 읽으면 새로운 맥락이 생깁니다. 변화한 생각을 덧붙이고, 이어지는 문서가 있다면 연결합니다.\n\n## 작은 기록\n\n같은 이름의 문단도 각자 직접 연결할 수 있어야 합니다.\n\n안전한 마크다운만 표현합니다.[^note]\n\n[^note]: 가상의 각주입니다.\n\n<script>window.__unsafeWiki = true</script>\n\n[실행하면 안 되는 주소](javascript:alert(1))\n\n[발행한 문서 링크](https://cha-amu.github.io/amuwiki/#%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%3Aa%26b)",
+      "links": [
+        {
+          "target": "doc:프로젝트:a&b",
+          "type": "uses"
+        },
+        {
+          "target": "doc:질문",
+          "type": "related"
+        }
+      ],
+      "sources": [
+        {
+          "label": "가상의 참고자료",
+          "url": "https://example.com/reference"
+        }
+      ],
+      "updated": "2026-10-07T00:00:00.000Z"
+    },
+    {
+      "id": "프로젝트:a&b",
+      "title": "작은 기록실 만들기",
+      "kind": "project",
+      "tags": ["기록", "연결"],
+      "body": "검수용 프로젝트입니다. 생각을 모으는 작은 기록실을 만듭니다.\n\n## 시작\n\n읽는 사람에게 넉넉한 공간을 남겨 둡니다.",
+      "links": [
+        {
+          "target": "doc:결정",
+          "type": "supports"
+        }
+      ],
+      "sources": [],
+      "updated": "2026-10-06"
+    },
+    {
+      "id": "질문",
+      "title": "어떤 연결을 남길까?",
+      "kind": "question",
+      "tags": ["질문"],
+      "body": "비슷한 이름보다 실제로 연결한 이유를 남겨 봅니다.",
+      "links": [
+        {
+          "target": "doc:읽기/기록?#%한글",
+          "type": "related"
+        }
+      ],
+      "sources": [],
+      "updated": "2026-10-05"
+    },
+    {
+      "id": "결정",
+      "title": "읽기 좋은 폭",
+      "kind": "decision",
+      "tags": ["디자인"],
+      "body": "문장을 따라가는 데 필요한 읽기 폭을 유지합니다.",
+      "links": [],
+      "sources": [],
+      "updated": "2026-10-04"
+    },
+    {
+      "id": "fixture-only-amu-test",
+      "title": "태그만 같은 별개의 기록",
+      "kind": "concept",
+      "tags": ["연결"],
+      "body": "같은 태그가 있어도 연결선은 만들지 않습니다.",
+      "links": [],
+      "sources": [],
+      "updated": "2026-10-03"
+    }
+  ],
+  "resources": [
+    {
+      "kind": "post",
+      "id": "글/한글?#%",
+      "title": "책장을 넘긴 날",
+      "url": "https://example.com/posts/one",
+      "documentIds": ["읽기/기록?#%한글"]
+    },
+    {
+      "kind": "asset",
+      "id": "자료:a/b?x&y",
+      "title": "기록실 스케치",
+      "url": "https://example.com/assets/sketch.png",
+      "documentIds": ["프로젝트:a&b"]
+    }
+  ]
+}
