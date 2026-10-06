@@ -362,9 +362,7 @@ export function Graph({
                       onFocus={() => setActive(node.key)}
                       onMouseEnter={() => setActive(node.key)}
                     >
-                      <title>
-                        {node.title} · {kindLabels[node.kind]}
-                      </title>
+                      <title>{`${node.title} · ${kindLabels[node.kind]}`}</title>
                       <circle className="graph-node-hit" r="24" />
                       {isFocus && (
                         <circle className="graph-focus-ring" r="20" />

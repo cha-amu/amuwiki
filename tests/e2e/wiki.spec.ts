@@ -1,55 +1,131 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { loadEnv } from 'vite';
 import fixture from '../fixtures/public-wiki.json' with { type: 'json' };
+import { resolveConfig } from '../../src/domain/config';
 import { documentUrl, embedUrl } from '../../src/domain/navigation';
 
 const base = 'http://127.0.0.1:4186/amuwiki/';
+const { wikiUrl } = resolveConfig(
+  {
+    ...loadEnv('production', process.cwd(), 'VITE_'),
+    ...process.env,
+    BASE_URL: '/amuwiki/',
+  },
+  base,
+);
 const documentId = fixture.documents[0].id;
 const focus = `doc:${documentId}`;
 const fixtureRoute = async (page: Page) =>
   page.route('**/wiki.json', (route) => route.fulfill({ json: fixture }));
+// The parent repository owns the blog UI. This sentinel only verifies the
+// navigation destination, without depending on a live/deployed blog route.
+const blogRoute = async (page: Page) => {
+  const wiki = new URL(wikiUrl);
+  await page.route(
+    (url) => url.origin === wiki.origin && url.pathname === wiki.pathname,
+    (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<main id="blog-wiki">Blog wiki destination</main>',
+      }),
+  );
+};
 const evidence = (name: string, project: string) =>
   `artifacts/browser/${project}-${name}.png`;
 
-test('published empty state and missing document are distinct', async ({
+test('visitor routes redirect to the blog without fetching the public index', async ({
   page,
-}, info) => {
+}) => {
+  await blogRoute(page);
+  const indexRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/wiki.json'))
+      indexRequests.push(request.url());
+  });
   await page.goto(base);
-  await expect(
-    page.getByRole('heading', { name: '첫 문서를 기다리고 있어요.' }),
-  ).toBeVisible();
-  await expect(page.getByRole('heading', { name: '모든 문서' })).toBeVisible();
-  await page.screenshot({
-    path: evidence('empty', info.project.name),
-    fullPage: true,
+  await expect(page.locator('#blog-wiki')).toBeVisible();
+  expect(page.url()).toBe(wikiUrl);
+  const source = new URL(documentUrl(documentId, base, '작은-기록'));
+  source.search = new URLSearchParams({
+    view: 'graph',
+    scope: 'all',
+    focus,
+    tag: '읽기',
+    q: '두 단어',
+    parentOrigin: 'https://untrusted.example',
+  }).toString();
+  await page.goto(source.href);
+  await expect(page.locator('#blog-wiki')).toBeVisible();
+  const destination = new URL(page.url());
+  expect(destination.hash).toBe(
+    new URL(documentUrl(documentId, wikiUrl, '작은-기록')).hash,
+  );
+  expect(Object.fromEntries(destination.searchParams)).toEqual({
+    view: 'graph',
+    scope: 'all',
+    focus,
+    tag: '읽기',
+    q: '두 단어',
   });
-  await page.goto(documentUrl('찾을 수 없는 문서', base));
-  await expect(
-    page.getByRole('heading', { name: '문서를 찾을 수 없어요.' }),
-  ).toBeVisible();
-  await page.screenshot({
-    path: evidence('missing', info.project.name),
-    fullPage: true,
-  });
+  expect(indexRequests).toEqual([]);
+});
+
+test('an empty public graph and an unknown local focus are distinct', async ({
+  page,
+}) => {
+  await page.goto(embedUrl(undefined, 'all', base));
+  await expect(page.getByText('아직 공개된 문서가 없어요.')).toBeVisible();
+  await fixtureRoute(page);
+  await page.goto(embedUrl('doc:missing', 'local', base));
+  await expect(page.getByText('이 항목을 찾을 수 없어요.')).toBeVisible();
+  await expect(page.locator('.graph-node')).toHaveCount(0);
+});
+
+test('all-scope graph links target blog documents and canonical public resources', async ({
+  page,
+}) => {
+  await fixtureRoute(page);
+  await page.goto(embedUrl(undefined, 'all', base));
+  await expect(page.locator('.graph-node')).toHaveCount(7);
+  for (const resource of fixture.resources) {
+    const node = page.locator(`.graph-node[data-kind="${resource.kind}"]`);
+    await expect(node).toHaveAttribute('href', resource.url);
+    await expect(node).toHaveAttribute('target', '_top');
+  }
+  for (const doc of fixture.documents) {
+    const node = page.getByRole('link', { name: new RegExp(doc.title) });
+    await expect(node).toHaveAttribute(
+      'href',
+      documentUrl(doc.id, wikiUrl),
+    );
+    await expect(node).toHaveAttribute('target', '_top');
+  }
 });
 
 test('unpublished, failed fetch and invalid public index have different states', async ({
   page,
 }) => {
-  await page.route('**/wiki.json', (route) => route.fulfill({ status: 404 }));
-  await page.goto(base);
+  await page.route('**/wiki.json', (route) =>
+    route.fulfill({ status: 404 }),
+  );
+  await page.goto(embedUrl(undefined, 'all', base));
   await expect(
     page.getByRole('heading', { name: '아직 공개본이 없어요.' }),
   ).toBeVisible();
   await page.unroute('**/wiki.json');
-  await page.route('**/wiki.json', (route) => route.fulfill({ status: 503 }));
+  await page.route('**/wiki.json', (route) =>
+    route.fulfill({ status: 503 }),
+  );
   await page.getByRole('button', { name: '다시 불러오기' }).click();
   await expect(
     page.getByRole('heading', { name: '문서를 불러오지 못했어요.' }),
   ).toBeVisible();
   await page.unroute('**/wiki.json');
   await page.route('**/wiki.json', (route) =>
-    route.fulfill({ json: { ...fixture, private: ['synthetic-forbidden'] } }),
+    route.fulfill({
+      json: { ...fixture, private: ['synthetic-forbidden'] },
+    }),
   );
   await page.getByRole('button', { name: '다시 불러오기' }).click();
   await expect(
@@ -59,77 +135,16 @@ test('unpublished, failed fetch and invalid public index have different states',
   await expect(page.getByText('읽기에서 이어지는 생각')).toHaveCount(0);
 });
 
-test('public search, tag filters and reserved-character direct links work', async ({
-  page,
-}, info) => {
-  await fixtureRoute(page);
-  await page.goto(base);
-  await expect(
-    page.getByRole('heading', { name: '읽기에서 이어지는 생각' }),
-  ).toBeVisible();
-  await page.screenshot({
-    path: evidence('list', info.project.name),
-    fullPage: true,
-  });
-  await page.getByRole('searchbox', { name: '문서 검색' }).fill('개인 기록');
-  await expect(page.locator('.document-card')).toHaveCount(1);
-  await page.getByRole('searchbox').fill('없는단어');
-  await expect(
-    page.getByRole('heading', { name: '찾는 문서가 없어요.' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: '다시 둘러보기' }).click();
-  await page
-    .locator('.tag-cloud')
-    .getByRole('button', { name: '#읽기', exact: true })
-    .click();
-  await expect(page.locator('.document-card')).toHaveCount(1);
-  await page
-    .getByRole('link', { name: '읽기에서 이어지는 생각', exact: true })
-    .click();
-  await expect(
-    page.getByRole('heading', { name: '읽기에서 이어지는 생각', exact: true }),
-  ).toBeVisible();
-  expect(decodeURIComponent(new URL(page.url()).hash.slice(1))).toBe(
-    documentId,
-  );
-});
-
-test('markdown headings and footnotes never replace the document hash', async ({
-  page,
-}, info) => {
-  await fixtureRoute(page);
-  await page.goto(documentUrl(documentId, base));
-  await page.evaluate(() => document.fonts.ready);
-  await expect(page.locator('#wiki-section-작은-기록')).toBeVisible();
-  await expect(page.locator('#wiki-section-작은-기록-1')).toHaveCount(1);
-  await expect(page.locator('.markdown script')).toHaveCount(0);
-  await expect(page.locator('.markdown a[href^="javascript:"]')).toHaveCount(0);
-  await page.getByRole('link', { name: '같은 문단으로' }).click();
-  expect(new URL(page.url()).hash).toContain(encodeURIComponent(documentId));
-  await expect(page.locator('#document-title')).toHaveText(
-    '읽기에서 이어지는 생각',
-  );
-  await page.locator('.markdown a').filter({ hasText: /^1$/ }).click();
-  await expect(page.locator('#document-title')).toHaveText(
-    '읽기에서 이어지는 생각',
-  );
-  await page.goto(documentUrl(documentId, base));
-  await page.screenshot({
-    path: evidence('document', info.project.name),
-    fullPage: true,
-  });
-  await page.getByRole('link', { name: '다음 문서', exact: true }).click();
-  await expect(page.locator('#document-title')).toHaveText(
-    '작은 기록실 만들기',
-  );
-});
-
 test('graph click navigates and dragging a node or canvas never navigates', async ({
   page,
 }, info) => {
+  await blogRoute(page);
   await fixtureRoute(page);
-  await page.goto(`${base}?view=graph`);
-  const canvas = page.getByRole('group', { name: '연결 지도', exact: true });
+  await page.goto(embedUrl(undefined, 'all', base));
+  const canvas = page.getByRole('group', {
+    name: '연결 지도',
+    exact: true,
+  });
   const node = page.locator('.graph-node').filter({
     has: page.locator('title', { hasText: '읽기에서 이어지는 생각' }),
   });
@@ -148,7 +163,9 @@ test('graph click navigates and dragging a node or canvas never navigates', asyn
   await page.mouse.move(bounds!.x + 70, bounds!.y + 35, { steps: 8 });
   await page.mouse.up();
   expect(page.url()).toBe(originalUrl);
-  expect(await node.locator('..').getAttribute('transform')).not.toBe(before);
+  expect(await node.locator('..').getAttribute('transform')).not.toBe(
+    before,
+  );
   const cameraBefore = await page
     .locator('[data-camera]')
     .getAttribute('transform');
@@ -171,7 +188,9 @@ test('graph click navigates and dragging a node or canvas never navigates', asyn
   await page
     .getByRole('button', { name: '지도 처음 위치', exact: true })
     .click();
-  await page.getByRole('button', { name: '지도 확대', exact: true }).click();
+  await page
+    .getByRole('button', { name: '지도 확대', exact: true })
+    .click();
   await expect(page.getByLabel('지도 배율')).toHaveText('125%');
   await canvas.focus();
   await page.keyboard.press('+');
@@ -183,64 +202,14 @@ test('graph click navigates and dragging a node or canvas never navigates', asyn
   });
   if (info.project.name === 'mobile') await shape.tap();
   else await shape.click();
-  await expect(page.locator('#document-title')).toHaveText(
-    '읽기에서 이어지는 생각',
-  );
-});
-
-test('expanded graph traps focus, closes with Escape and restores scroll/focus', async ({
-  page,
-}, info) => {
-  await fixtureRoute(page);
-  await page.goto(documentUrl(documentId, base));
-  await page.evaluate(() => document.fonts.ready);
-  if (info.project.name === 'mobile') {
-    await expect(page.locator('.sidebar-map-body')).not.toBeVisible();
-    await page.getByRole('button', { name: '연결 지도 펼치기' }).click();
-    await expect(page.locator('.sidebar-map-body')).toBeVisible();
-  }
-  const opener = page.getByRole('button', { name: '지도로 둘러보기' });
-  await opener.scrollIntoViewIfNeeded();
-  await opener.focus();
-  await opener.evaluate((element) =>
-    element.addEventListener(
-      'click',
-      () => {
-        (window as unknown as { __openScroll: number }).__openScroll =
-          window.scrollY;
-      },
-      { once: true, capture: true },
-    ),
-  );
-  await opener.click();
-  const scrollY = await page.evaluate(
-    () => (window as unknown as { __openScroll: number }).__openScroll,
-  );
-  const dialog = page.getByRole('dialog', { name: '연결 지도' });
-  await expect(dialog).toBeVisible();
-  await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
-  const first = dialog.getByRole('button', { name: '주변', exact: true });
-  await first.focus();
-  await page.keyboard.press('Shift+Tab');
-  await expect(
-    dialog.getByRole('combobox', { name: '지도의 항목 선택' }),
-  ).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(first).toBeFocused();
-  await dialog.getByRole('button', { name: '전체', exact: true }).click();
-  await expect(dialog.locator('.graph-node')).toHaveCount(7);
-  await page.screenshot({ path: evidence('dialog', info.project.name) });
-  await page.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0);
-  await expect(opener).toBeFocused();
-  const afterScroll = await page.evaluate(() => window.scrollY);
-  expect(Math.abs(afterScroll - scrollY)).toBeLessThan(2);
-  await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
+  await expect(page.locator('#blog-wiki')).toBeVisible();
+  expect(page.url()).toBe(documentUrl(documentId, wikiUrl));
 });
 
 test('embed is graph-only and its document links leave the iframe', async ({
   page,
 }) => {
+  await blogRoute(page);
   await fixtureRoute(page);
   const url = embedUrl(focus, 'local', base);
   await page.route('**/embed-parent', (route) =>
@@ -259,9 +228,8 @@ test('embed is graph-only and its document links leave the iframe', async ({
   });
   await expect(node).toHaveAttribute('target', '_top');
   await node.locator('.graph-node-shape').click();
-  await expect(page.locator('#document-title')).toHaveText(
-    '읽기에서 이어지는 생각',
-  );
+  await expect(page.locator('#blog-wiki')).toBeVisible();
+  expect(page.url()).toBe(documentUrl(documentId, wikiUrl));
   await expect(page.locator('iframe')).toHaveCount(0);
 });
 
@@ -277,7 +245,7 @@ test('viewport stays within the screen and no simulation runs while idle', async
       return original(callback);
     };
   });
-  await page.goto(`${base}?view=graph`);
+  await page.goto(embedUrl(undefined, 'all', base));
   await expect(page.locator('.graph-node')).toHaveCount(7);
   const initial = await page.evaluate(
     () => (window as unknown as { __frameCalls: number }).__frameCalls,
@@ -299,8 +267,9 @@ test('viewport stays within the screen and no simulation runs while idle', async
 test('graph nodes can be found, moved and opened entirely with the keyboard', async ({
   page,
 }) => {
+  await blogRoute(page);
   await fixtureRoute(page);
-  await page.goto(`${base}?view=graph`);
+  await page.goto(embedUrl(undefined, 'all', base));
   await page
     .getByRole('combobox', { name: '지도의 항목 선택' })
     .selectOption(focus);
@@ -310,78 +279,12 @@ test('graph nodes can be found, moved and opened entirely with the keyboard', as
   await expect(node).toBeFocused();
   const before = await node.locator('..').getAttribute('transform');
   await page.keyboard.press('Shift+ArrowRight');
-  expect(await node.locator('..').getAttribute('transform')).not.toBe(before);
+  expect(await node.locator('..').getAttribute('transform')).not.toBe(
+    before,
+  );
   await page.keyboard.press('Enter');
-  await expect(page.locator('#document-title')).toHaveText(
-    '읽기에서 이어지는 생각',
-  );
-});
-
-test('closing the map releases its resize observer', async ({ page }, info) => {
-  await fixtureRoute(page);
-  await page.addInitScript(() => {
-    const active = new Set<ResizeObserver>();
-    const OriginalObserver = window.ResizeObserver;
-    window.ResizeObserver = class extends OriginalObserver {
-      observe(target: Element, options?: ResizeObserverOptions) {
-        active.add(this);
-        super.observe(target, options);
-      }
-      disconnect() {
-        active.delete(this);
-        super.disconnect();
-      }
-    };
-    (
-      window as unknown as { __activeObservers: () => number }
-    ).__activeObservers = () => active.size;
-  });
-  await page.goto(documentUrl(documentId, base));
-  await expect(page.locator('#document-title')).toBeVisible();
-  if (info.project.name === 'mobile')
-    await page.getByRole('button', { name: '연결 지도 펼치기' }).click();
-  const observerCount = () =>
-    page.evaluate(() =>
-      (
-        window as unknown as { __activeObservers: () => number }
-      ).__activeObservers(),
-    );
-  const before = await observerCount();
-  await page.getByRole('button', { name: '지도로 둘러보기' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  expect(await observerCount()).toBe(before + 1);
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  expect(await observerCount()).toBe(before);
-});
-
-test('published wiki links stay on the active host and programmatic title focus has no outline', async ({
-  page,
-}) => {
-  await fixtureRoute(page);
-  await page.goto(documentUrl(documentId, base));
-  await expect(page.locator('#document-title')).toBeFocused();
-  await expect(page.locator('#document-title')).toHaveCSS(
-    'outline-style',
-    'none',
-  );
-  const publishedLink = page.getByRole('link', {
-    name: '발행한 문서 링크',
-    exact: true,
-  });
-  await expect(publishedLink).toHaveAttribute(
-    'href',
-    documentUrl(fixture.documents[1].id, base),
-  );
-  await publishedLink.focus();
-  await expect(publishedLink).toHaveCSS('outline-style', 'solid');
-  await page.keyboard.press('Enter');
-  await expect(page.locator('#document-title')).toHaveText(
-    '작은 기록실 만들기',
-  );
-  expect(new URL(page.url()).origin).toBe(new URL(base).origin);
-  await expect(page.getByText('조금 더 일상적인 이야기')).toHaveCount(0);
-  await expect(page.getByText('기록하고, 잇고, 다시 읽기.')).toHaveCount(0);
+  await expect(page.locator('#blog-wiki')).toBeVisible();
+  expect(page.url()).toBe(documentUrl(documentId, wikiUrl));
 });
 
 test('Escape in a sandboxed cross-origin embed signals only the allowed parent', async ({
@@ -396,7 +299,9 @@ test('Escape in a sandboxed cross-origin embed signals only the allowed parent',
   await page.goto(parent.href);
   const frame = page.frameLocator('iframe');
   await expect(frame.locator('.graph-node')).toHaveCount(7);
-  await frame.getByRole('group', { name: '연결 지도', exact: true }).focus();
+  await frame
+    .getByRole('group', { name: '연결 지도', exact: true })
+    .focus();
   await page.keyboard.press('Escape');
   await expect(page.locator('#message')).toHaveText('amuwiki:escape');
 });
@@ -439,36 +344,7 @@ test('a 190px sidebar embed fits the local graph without any document scrollbars
     expect(box!.y).toBeGreaterThanOrEqual(0);
     expect(box!.y + box!.height).toBeLessThanOrEqual(240);
   }
-  await page.screenshot({ path: evidence('embed-190px', info.project.name) });
-});
-
-test('footer font replacement cannot shorten the page during modal scroll restoration', async ({
-  page,
-}) => {
-  await fixtureRoute(page);
-  await page.goto(documentUrl(documentId, base));
-  await expect(page.locator('#document-title')).toBeVisible();
-  const footer = page.locator('.site-footer');
-  const heightBefore = await footer.evaluate(
-    (element) => element.getBoundingClientRect().height,
-  );
-  await footer
-    .locator('a')
-    .first()
-    .evaluate((element) => {
-      element.style.fontFamily = 'Arial, sans-serif';
-    });
-  expect(
-    await footer.evaluate((element) => element.getBoundingClientRect().height),
-  ).toBe(heightBefore);
-  await page.evaluate(() => document.fonts.ready);
-  await footer
-    .locator('a')
-    .first()
-    .evaluate((element) => {
-      element.style.fontFamily = '';
-    });
-  expect(
-    await footer.evaluate((element) => element.getBoundingClientRect().height),
-  ).toBe(heightBefore);
+  await page.screenshot({
+    path: evidence('embed-190px', info.project.name),
+  });
 });

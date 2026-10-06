@@ -1,100 +1,90 @@
-# 아무위키
+# 아무위키 공개 스냅샷과 임베드 지도
 
-채아무 블로그에 연결하는 공개 개인 백과사전입니다. React + TypeScript + Vite로 만들며, 서버 없이 GitHub Pages에서 동작합니다.
+위키의 독자 화면은 [채아무 블로그의 `/wiki/`](https://cha-amu.github.io/wiki/)입니다. 블로그 글과 같은 헤더·메뉴·본문 레이아웃 안에서 문서, 검색, 태그, 연결 지도를 제공합니다. 저장소 분리는 데이터 발행 경계를 위한 것이며, 별도의 위키 웹사이트를 운영하기 위한 것이 아닙니다.
 
-## 실행
+이 저장소는 공개 JSON과 React + TypeScript + Vite 기반 **임베드 연결 지도만** GitHub Pages에 제공합니다. `/amuwiki/`, 문서 해시 주소, `?view=graph` 등 일반 방문 주소는 블로그 `/wiki/`로 이동합니다. 리다이렉트는 React를 마운트하거나 JSON을 요청하기 전에 `location.replace`로 실행합니다. `?embed=graph`만 이 저장소에서 렌더링합니다.
+
+## 실행과 검증
 
 Node 24를 사용합니다. `.nvmrc`와 `package-lock.json`이 포함되어 있습니다.
 
 ```sh
 npm ci
-npm run dev
 npm test
 npm run build
-npm run preview
+npm run dev
 ```
 
-기본 개발 주소는 `http://127.0.0.1:5173/amuwiki/`입니다. 빌드 결과는 `dist/`입니다. `build`는 타입 검사와 공개 JSON 검증을 먼저 수행하며 잘못된 공개본이면 실패합니다.
+개발 주소는 `http://127.0.0.1:5173/amuwiki/`입니다. 일반 주소로 들어가면 설정된 블로그로 이동하므로, 지도만 확인할 때는 `http://127.0.0.1:5173/amuwiki/?embed=graph&scope=all`을 사용합니다. 빌드 결과는 `dist/`이며 `npm run preview`로 제공할 수 있습니다. `build`는 타입 검사와 공개 JSON 검증을 먼저 수행하며 잘못된 공개본이면 실패합니다.
 
-`npm run test:e2e`는 설치된 Google Chrome으로 데스크톱·모바일 브라우저 검수를 실행합니다. 먼저 `npm run build`를 실행하세요. 다른 Chromium 채널을 쓸 때는 `PLAYWRIGHT_CHANNEL`을 지정할 수 있습니다. 테스트 전용 위키 서버는 4186, cross-origin 부모 페이지는 4187 포트를 사용합니다. 스크린샷은 Git에서 제외한 `artifacts/browser/`, 실패 trace는 `test-results/`에 저장됩니다.
+로컬 블로그가 5178 포트에서 실행 중이면 다음과 같이 연결합니다. JSON과 임베드는 계속 이 저장소의 서버에서 제공됩니다.
 
-## 공개본
-
-`public/wiki.json`은 최초 상태에서 다음 빈 공개본입니다. 사용자가 발행하기 전에는 빈 화면이 정상입니다.
-
-```json
-{
-  "version": 1,
-  "generatedAt": "2026-10-07T00:00:00.000Z",
-  "documents": [],
-  "resources": []
-}
+```sh
+VITE_BLOG_URL=http://127.0.0.1:5178/ npm run dev
+VITE_BLOG_URL=http://127.0.0.1:5178/ npm run build
 ```
 
-데이터 계약은 `src/domain/wiki.ts`, 검증은 `src/domain/validation.ts`에 있습니다. 입력에는 공개를 허용한 문서·링크·출처·자료만 있어야 합니다. 이 프론트엔드는 개인 원본 저장소에 접근하지 않으며, 원본을 공개/비공개로 분류하는 exporter 역할도 수행하지 않습니다.
+`npm test`는 리다이렉트·설정·진입점 분기, 서버 렌더링 결과의 링크, 그래프 도메인, 공개본 검증, Escape의 origin 검증을 실행합니다. 서버 렌더링 테스트는 브라우저의 크기·동작 검수를 대신하지 않습니다.
 
-- 목록·검색·태그·역링크·지도는 오직 실행 중 fetch한 공개 JSON에서 계산합니다.
-- 알려지지 않은 필드, 중복 ID, 공개본 안에서 찾을 수 없는 참조, 안전하지 않은 URL을 거부합니다. 잘못된 부분을 제외하고 성공으로 보이게 하지 않습니다.
-- 공개되지 않은 항목의 노드, 대체 제목, 연결선, 개수를 생성하지 않습니다.
-- 태그는 검색과 필터에만 사용합니다. 연결선은 `links`와 `resources[].documentIds`에서만 생깁니다.
-- `links[].target`은 `doc:<id>`, `post:<id>`, `asset:<id>` 형식의 공개 key를 권장합니다. 접두사가 없는 문서 ID도 호환하며, 충돌 시 완전한 key를 우선합니다. `resources[].documentIds`에는 원래 문서 ID를 넣습니다.
-- HTTP 404/410은 아직 미발행 상태, 다른 HTTP/네트워크 실패는 읽기 실패, 계약 위반은 잘못된 공개본으로 구분합니다. 정상적인 빈 공개본과 존재하지 않는 문서도 각각 구분합니다.
-- 쿠키 없이 `cache: 'no-store'`로 요청하고 15초 후 중단합니다. 이전 응답·로컬 저장소·샘플 데이터로 대체하지 않습니다.
+`npm run test:e2e`는 별도로 설치된 Google Chrome에서 데스크톱·모바일 검수를 실행합니다. 먼저 같은 환경 변수로 `npm run build`를 실행해야 합니다. 다른 Chromium 채널에는 `PLAYWRIGHT_CHANNEL`을 사용합니다. 테스트 서버는 4186 포트, cross-origin 부모는 4187 포트를 사용합니다. 블로그 목적지는 테스트 응답으로 대체하여 이동 주소만 검증합니다. 실제 블로그의 `/wiki/` 화면은 블로그 저장소에서 검수해야 합니다.
+
+기존 독립 사이트의 목록·마크다운·대화상자·푸터 검수는 제거했습니다. E2E에는 리다이렉트, 오류/재시도, 지도 이동·확대·키보드, `_top` 링크, cross-origin Escape, 190×240px의 스크롤 없는 임베드 검수가 남아 있습니다. 스크린샷은 `artifacts/browser/`, 실패 trace는 `test-results/`에 저장됩니다. 이 패치의 브라우저/E2E 검수는 실행하지 않았으며 부모 작업에서 수행합니다.
+
+## 공개본과 개인정보 경계
+
+`public/wiki.json`은 현재 문서 0개·자료 0개의 공개본입니다. 발행한 문서가 없을 때 빈 지도는 정상이며, 검수용 데이터를 공개본에 넣지 않습니다. JSON endpoint는 기본 `https://cha-amu.github.io/amuwiki/wiki.json`이고 리다이렉트 대상이 아닙니다.
+
+데이터 계약은 `src/domain/wiki.ts`, 검증은 `src/domain/validation.ts`에 있습니다. 공개를 허용한 문서·링크·출처·자료만 입력해야 합니다. 이 프로젝트는 개인 원본 저장소에 접근하거나 공개/비공개를 분류하는 exporter 역할을 하지 않습니다.
+
+- 지도는 실행 중 fetch한 공개 JSON에서만 계산합니다. 연결선은 `links`와 `resources[].documentIds`에서만 만들며 태그가 같다는 이유로 연결하지 않습니다.
+- 알려지지 않은 필드, 중복 ID, 없는 항목 참조, 안전하지 않은 URL을 만나면 공개본 전체를 거부합니다. 비공개 항목의 대체 노드·제목·연결선·개수를 만들지 않습니다.
+- `links[].target`은 `doc:<id>`, `post:<id>`, `asset:<id>`를 권장합니다. 접두사 없는 문서 ID도 호환하며 충돌 시 완전한 key를 우선합니다. `resources[].documentIds`에는 원래 문서 ID를 넣습니다.
+- HTTP 404/410은 미발행, 다른 HTTP/네트워크 실패는 읽기 실패, 계약 위반은 잘못된 공개본으로 구분합니다. 정상적인 빈 공개본과 알 수 없는 local focus도 구분합니다.
+- 요청은 `credentials: 'omit'`, `cache: 'no-store'`이며 15초 후 중단합니다. 이전 응답·로컬 저장소·샘플 데이터로 대체하지 않습니다.
 - 입력 예산은 8 MiB, 문서 5,000개, 자료 5,000개, 연결 50,000개입니다. 초과하면 전체 공개본을 거부합니다.
 
-가상 검수 데이터는 `tests/fixtures/`에만 있습니다. 브라우저 테스트는 네트워크 응답을 가로채 사용하며, 이를 `public/` 또는 기본 빌드에 넣지 않습니다.
+가상 검수 데이터는 `tests/fixtures/`에만 있습니다. 테스트에서만 사용하며 `public/`과 배포 번들에 포함하지 않습니다. 기존 공개 데이터·자료 링크·이미지는 유지합니다.
 
-## 주소와 블로그 연결
+## 주소 설정과 리다이렉트
 
-기본 배포 주소는 `https://cha-amu.github.io/amuwiki/`, JSON은 같은 위치의 `wiki.json`입니다. 환경 변수를 지정하지 않으면 현재 origin과 Vite base를 사용하므로 임시 정적 서버에서도 동작합니다.
+`.env.example`의 값은 브라우저 번들에 포함되는 공개 설정입니다. 비밀 값을 넣지 마세요.
 
-`.env.example`을 참고해 다음 공개 환경 변수를 설정할 수 있습니다. 환경 변수에는 비밀 값을 넣지 마세요.
+| 변수                  | 용도와 기본값                                                                    |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `VITE_BLOG_URL`       | 블로그 및 상대 자료 URL의 기준. 기본 `https://cha-amu.github.io/`                |
+| `VITE_WIKI_URL`       | 블로그 위키 페이지를 명시적으로 재정의. 기본은 `VITE_BLOG_URL` origin의 `/wiki/` |
+| `VITE_WIKI_INDEX_URL` | 공개 JSON 주소. 기본은 현재 배포 origin과 Vite base 아래 `wiki.json`             |
+| `VITE_BASE_PATH`      | 공개본·임베드의 Vite base. 기본 `/amuwiki/`                                      |
 
-| 변수                  | 용도                                      |
-| --------------------- | ----------------------------------------- |
-| `VITE_WIKI_BASE_URL`  | 문서·지도 링크의 기본 URL                 |
-| `VITE_WIKI_INDEX_URL` | 공개 JSON 주소                            |
-| `VITE_BLOG_URL`       | 채아무 블로그 링크와 상대 자료 URL의 기준 |
-| `VITE_BASE_PATH`      | Vite base, 기본 `/amuwiki/`               |
+`VITE_WIKI_BASE_URL`은 `VITE_WIKI_URL`의 이전 별칭이고, 둘 다 설정하면 `VITE_WIKI_URL`이 우선합니다. `VITE_PUBLIC_INDEX_URL`도 이전 JSON 주소 별칭으로 지원합니다. 위키 주소에 남아 있는 query/hash는 제거하며, 예전 `/amuwiki/` 배포 루트를 가리키는 설정은 리다이렉트 반복을 막기 위해 블로그 기본 `/wiki/`로 대체합니다. 다른 origin에서 JSON을 제공하면 해당 서버의 CORS 허용이 필요합니다.
 
-`VITE_WIKI_URL`, `VITE_PUBLIC_INDEX_URL` 별칭도 지원합니다. 다른 origin에서 JSON을 제공할 경우 해당 서버에서 CORS를 허용해야 합니다.
+일반 방문 URL은 다음 상태만 보존합니다. 입력이 목적지 origin이나 경로를 바꾸지는 못합니다.
 
-- 문서: `/amuwiki/#${encodeURIComponent(id)}`
-- 문단: `/amuwiki/#${encodeURIComponent(id)}/${encodeURIComponent(headingSlug)}`
-- 전체 지도: `/amuwiki/?view=graph`
-- 임베드: `/amuwiki/?embed=graph&focus=<URL로 인코딩한 key>&scope=local`
-- 전체 임베드: 같은 주소에서 `scope=all`
+- 문서 해시: `#${encodeURIComponent(id)}`. 문단은 `#${encodeURIComponent(id)}/${encodeURIComponent(heading)}`. 한글·예약문자는 해석 후 다시 인코딩하며, 잘못된 인코딩·제어문자·빈 ID·2,048자를 넘는 ID/문단은 버립니다.
+- 그래프: `view=graph`일 때 `focus=doc:<id>|post:<id>|asset:<id>`와 `scope=local|all`을 보존합니다.
+- 필터: `tag`와 검색 매개변수 `q`, `search`, `query`를 보존합니다. 제어문자·빈 값·예산을 넘는 값(tag 100자, 검색 2,048자)은 버립니다.
+- `embed`, `parentOrigin`, 기타 매개변수는 블로그로 전달하지 않습니다.
 
-`src/domain/navigation.ts`의 `documentUrl`, `graphUrl`, `embedUrl`이 안전한 URL 생성 함수입니다. 한글·슬래시·물음표·해시·퍼센트·콜론을 포함한 ID를 지원합니다. `scope=local`은 지정 항목과 양방향 1-hop 이웃만 포함합니다. 존재하지 않는 focus는 빈 오류 상태이며 다른 항목으로 대체하지 않습니다.
+문서 URL의 기본값은 `/wiki/#<id>`, 전체 지도 URL의 기본값은 `/wiki/?view=graph`입니다. `src/domain/navigation.ts`의 `documentUrl`, `graphUrl`, `embedUrl`은 문서 페이지와 임베드의 기본 URL을 구분합니다. 과거에 발행한 `/amuwiki/#<id>` 링크도 일반 방문 리다이렉트를 통해 블로그 문서로 이어집니다.
 
-블로그는 iframe으로 같은 `Graph` 컴포넌트를 재사용합니다. 임베드에는 위키 메뉴나 본문이 없고, 문서 링크는 `target="_top"`으로 위키의 최상위 화면을 엽니다. 부모 iframe에 sandbox를 지정한다면 클릭에 의한 최상위 이동을 허용해야 합니다. 임베드 자체에 별도 확대 헤더가 없으므로 부모가 큰 지도 영역을 열 수 있습니다.
+## 블로그의 지도 iframe
 
-iframe 내부의 Escape는 부모에게 `{type: 'amuwiki:escape'}` 메시지를 보냅니다. `embed=graph` 화면에서만 활성화되며 targetOrigin은 `VITE_BLOG_URL`의 origin입니다. 부모는 iframe의 `contentWindow`와 위키 origin을 함께 확인해야 합니다. 운영에서는 다른 origin을 허용하지 않습니다. 로컬 포트가 다르고 `referrerPolicy="no-referrer"`라면 iframe URL에 `parentOrigin=http://127.0.0.1:5178`처럼 **정확한 origin만** 추가하세요. 이 예외는 위키와 부모 모두 `localhost`, `127.0.0.1`, `[::1]`일 때만 허용됩니다. referrer가 제공되는 로컬 환경에서는 그 loopback origin도 사용할 수 있습니다. wildcard targetOrigin은 사용하지 않습니다.
+임베드는 `/amuwiki/?embed=graph&focus=<URL로 인코딩한 key>&scope=local|all`에 있습니다. 예를 들어 전체 공개 지도에는 focus 없이 `/amuwiki/?embed=graph&scope=all`을 사용합니다.
 
-## 본문과 지도
+`scope=local`은 지정한 문서·글·자료와 양방향 1-hop 이웃만 포함합니다. focus가 없거나 존재하지 않으면 다른 항목으로 대체하지 않습니다. `scope=all`은 focus 유무와 관계없이 모든 공개 노드를 보여 줍니다. scope를 생략하거나 잘못 지정하면 local입니다.
 
-마크다운은 `react-markdown`과 `remark-gfm`으로 렌더링합니다. raw HTML은 실행하거나 삽입하지 않습니다. `doc:<encodeURIComponent(id)>`를 문서 링크로, `#heading-slug`를 현재 문서의 문단 링크로 사용합니다. 문단·각주 이동이 문서 라우트와 충돌하지 않도록 문서 ID를 주소에 보존합니다.
+블로그가 헤더·탐색·본문·확대 영역을 담당합니다. 임베드에는 별도의 사이트 헤더나 문서 화면이 없습니다. 모든 그래프 링크는 `target="_top"`입니다. 문서 링크는 설정된 **블로그 `/wiki/#id`**로, 공개 post/asset 링크는 공개본의 canonical URL로 이동합니다. 상대 자료 URL은 `VITE_BLOG_URL` 기준입니다. iframe에 sandbox를 사용하면 사용자 클릭에 의한 최상위 이동을 허용해야 합니다.
 
-exporter가 본문에 넣은 `https://cha-amu.github.io/amuwiki/#<id>` 절대 문서 링크도 현재 `VITE_WIKI_BASE_URL`로 옮겨 엽니다. 로컬 미리보기 및 다른 배포 경로에서 ID와 문단을 그대로 유지하며, 다른 사이트나 블로그 경로의 링크는 바꾸지 않습니다.
+iframe 내부 Escape는 부모에게 `{type: 'amuwiki:escape'}`를 보냅니다. `useEmbedEscape`는 `embed=graph`에서만 사용하며 `targetOrigin`은 검증된 `VITE_BLOG_URL` origin입니다. 부모는 iframe의 `contentWindow`와 공개본 서버 origin을 함께 확인해야 합니다. 운영에서 임의의 origin이나 wildcard를 허용하지 않습니다.
 
-오른쪽 230~244px 영역에 230px 높이 지도를 두고, 좁은 화면에서는 읽기 영역 아래의 접힌 지도로 바꿉니다. 확대 dialog는 native modal과 명시적 Tab 순환을 함께 사용하며 Escape, 초점 복귀, 스크롤 위치 복원을 지원합니다.
+로컬 포트가 다르고 `referrerPolicy="no-referrer"`라면 iframe URL에 `parentOrigin=http://127.0.0.1:5178`처럼 **정확한 origin만** 추가할 수 있습니다. 추가 loopback 허용은 임베드와 부모 모두 `localhost`, `127.0.0.1`, `[::1]`일 때만 적용됩니다. 로컬 referrer가 있으면 그 loopback origin도 사용할 수 있습니다.
 
-임베드에서는 일반 페이지의 최소 폭과 스크롤 여백을 적용하지 않습니다. 190×240px에서도 HTML·body·root·지도 영역에 가로/세로 스크롤바가 없고 로컬 노드와 명칭이 화면에 들어오는 것을 브라우저에서 검수합니다.
+지도는 iframe 크기에 맞게 렌더링하며 HTML·body·root에 최소 폭이나 스크롤 여백을 두지 않습니다. 190×240px local 지도와 로딩/오류 상태도 이 경계를 사용합니다. 초기 배치 이후 지속적인 requestAnimationFrame·타이머·물리 시뮬레이션은 없습니다. 120개 이하의 노드만 최대 60회 충돌 조정을 거치며 큰 지도는 모든 노드를 유지하는 제한된 배치를 사용합니다. ResizeObserver와 wheel 리스너는 컴포넌트 정리 시 해제합니다.
 
-지도는 초기 배치 후 멈춥니다. 120개 이하의 노드만 제한된 60회 충돌 조정으로 배치하며, 더 큰 지도는 선형 배치를 사용합니다. 모든 공개 노드를 유지하고 화면을 그리기 위해 데이터를 잘라내지 않습니다. 지속적인 requestAnimationFrame, 타이머, 물리 시뮬레이션이 없습니다. `ResizeObserver`, wheel 리스너는 컴포넌트 정리 시 해제합니다.
+마우스/터치로 지도와 노드를 옮기고 버튼·휠로 확대/축소합니다. 작은 지도는 Ctrl/⌘ 없는 휠을 가로채지 않습니다. 키보드는 Tab/Enter로 링크 이동, 방향키로 지도 이동, Shift+방향키로 노드 이동, `+`/`-`로 배율 조절, `0`/Home으로 초기화합니다. 접근 가능한 이름에는 전체 명칭을 유지합니다.
 
-마우스/터치 드래그로 지도와 노드를 옮기고, 버튼·휠로 확대/축소합니다. 작은 지도는 Ctrl/⌘ 없는 휠을 가로채지 않습니다. 키보드로는 Tab과 Enter로 링크 이동, 방향키로 지도 이동, Shift+방향키로 선택 노드 이동, `+`/`-`로 배율 조절, `0`/Home으로 초기화합니다. 긴 명칭은 링크의 접근 가능한 이름과 항목 선택 목록에 모두 남습니다.
+## 배포 순서
 
-## 배포
+`.github/workflows/pages.yml`은 `main` push 또는 수동 실행 시 Node 24에서 설치·단위 테스트·검증·빌드를 거쳐 기존 Pages artifact를 배포합니다.
 
-`.github/workflows/pages.yml`은 `main` push 또는 수동 실행 시 Node 24에서 설치·단위 테스트·빌드 후 Pages artifact를 배포합니다. Pages의 GitHub Actions 연결과 저장소 정책 설정은 저장소 관리자가 별도로 완료해야 합니다. 이 작업에서는 GitHub 설정 변경, 커밋, push, 배포를 실행하지 않았습니다.
-
-## 참조
-
-- [Vite 시작하기](https://vite.dev/guide/), [GitHub Pages 배포](https://vite.dev/guide/static-deploy.html#github-pages)
-- [React effect 정리](https://react.dev/reference/react/useEffect)
-- [react-markdown 안전한 렌더링](https://github.com/remarkjs/react-markdown#security), [remark-gfm](https://github.com/remarkjs/remark-gfm)
-- [Vitest](https://vitest.dev/guide/), [Playwright web server](https://playwright.dev/docs/test-webserver)
-- [Modal dialog](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal)
-
-그림은 지정된 기존 `guestbook-icon.png`를 수정 없이 복사했습니다. 새 이미지 생성이나 개인 지식 원본의 읽기·복사는 하지 않았습니다.
+**블로그의 네이티브 `/wiki/` 경로가 먼저 배포되어야 합니다.** 그 뒤 이 리다이렉트 패치를 배포해야 방문자가 존재하지 않는 블로그 경로로 이동하지 않습니다. 커밋·push·배포와 실제 블로그 통합 검수는 부모 작업에서 처리합니다.

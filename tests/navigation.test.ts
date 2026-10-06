@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import fixture from './fixtures/public-wiki.json';
 import {
   documentUrl,
   embedUrl,
@@ -7,18 +6,15 @@ import {
   parseDocumentHash,
   remapWikiDocumentUrl,
 } from '../src/domain/navigation';
-import { excerpt, findDocuments, publicTags } from '../src/domain/search';
-import { validateIndex } from '../src/domain/validation';
 
-const index = validateIndex(fixture);
 describe('published absolute document links follow the active deployment', () => {
-  it('maps an exported canonical URL to the current local wiki', () => {
+  it('maps an exported canonical URL to the blog wiki page', () => {
     expect(
       remapWikiDocumentUrl(
         'https://cha-amu.github.io/amuwiki/#collision',
-        'http://localhost:4174/amuwiki/',
+        'http://127.0.0.1:5178/wiki/',
       ),
-    ).toBe('http://localhost:4174/amuwiki/#collision');
+    ).toBe('http://127.0.0.1:5178/wiki/#collision');
   });
   it('retains reserved-character IDs and headings at custom deployment paths', () => {
     const href = documentUrl('한글/문서?#%', undefined, '작은-기록');
@@ -41,7 +37,7 @@ describe('published absolute document links follow the active deployment', () =>
       'https://cha-amu.github.io/amuwiki/#%GG',
     ]) {
       expect(
-        remapWikiDocumentUrl(href, 'http://localhost:4174/amuwiki/'),
+        remapWikiDocumentUrl(href, 'http://127.0.0.1:5178/wiki/'),
       ).toBeUndefined();
     }
   });
@@ -57,7 +53,7 @@ describe('URL encoding and independent heading routes', () => {
   ])('roundtrips a document ID: %s', (id) => {
     const url = new URL(documentUrl(id));
     expect(parseDocumentHash(url.hash)?.id).toBe(id);
-    expect(url.pathname).toBe('/amuwiki/');
+    expect(url.pathname).toBe('/wiki/');
   });
   it('separates an encoded slash inside a document ID from the heading separator', () => {
     const url = new URL(
@@ -96,40 +92,12 @@ describe('URL encoding and independent heading routes', () => {
   });
   it('produces a full graph page with no old document hash', () => {
     expect(
-      new URL(graphUrl('https://example.com/amuwiki/#old')).searchParams.get(
-        'view',
-      ),
+      new URL(
+        graphUrl('https://example.com/amuwiki/#old'),
+      ).searchParams.get('view'),
     ).toBe('graph');
-    expect(new URL(graphUrl('https://example.com/amuwiki/#old')).hash).toBe('');
-  });
-});
-describe('lists and search operate exclusively on the supplied public index', () => {
-  it('searches title, body and tags with intersection semantics', () => {
-    expect(findDocuments(index, '기록실')).toHaveLength(1);
-    expect(findDocuments(index, '개인 기록')).toHaveLength(1);
-    expect(findDocuments(index, '연결', '읽기').map((doc) => doc.id)).toEqual([
-      index.documents[0].id,
-    ]);
-    expect(findDocuments(index, '존재하지 않음')).toEqual([]);
-  });
-  it('lists only public tags, with no relation inference', () => {
-    expect(publicTags(index)).toEqual([
-      '기록',
-      '디자인',
-      '연결',
-      '읽기',
-      '질문',
-    ]);
-  });
-  it('does not pull fixtures or search history into an empty index', () => {
-    const empty = { ...index, documents: [], resources: [] };
-    expect(findDocuments(empty, '')).toEqual([]);
-    expect(publicTags(empty)).toEqual([]);
-  });
-  it('turns markdown into a bounded plain text excerpt', () => {
-    expect(excerpt('## 제목\n\n[본문](https://example.com) **강조**')).toBe(
-      '제목 본문 강조',
+    expect(new URL(graphUrl('https://example.com/amuwiki/#old')).hash).toBe(
+      '',
     );
-    expect(excerpt('a'.repeat(1000))).toHaveLength(160);
   });
 });
