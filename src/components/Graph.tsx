@@ -5,6 +5,7 @@ import { layoutGraph, selectGraph, zoomCamera } from '../domain/graph';
 import type { Camera, GraphNode, Position, WikiGraph } from '../domain/graph';
 import { documentUrl } from '../domain/navigation';
 import { graphMessages } from '../domain/i18n';
+import { planCompactLabels, splitTitle } from '../domain/labels';
 import type { Language } from '../domain/i18n';
 import { safeUrl } from '../domain/wiki';
 import { Icon } from './Icons';
@@ -61,21 +62,17 @@ export function Graph({
   // Small embeds reserve screen-space margins for readable labels and controls;
   // merely scaling the entire desktop drawing can clip a label at 190px wide.
   const drawingHeight = compact ? Math.max(40, size.height - 42) : size.height;
-  const nodeSpanHeight = Math.max(80, layout.height - 160);
-  const fit = compact
-    ? Math.max(
-        0.02,
-        Math.min(
-          Math.max(20, size.width - 72) / Math.max(100, layout.width - 220),
-          Math.max(20, drawingHeight - 50) / nodeSpanHeight,
-          // Above ~0.5x a label sits 35 drawing units below its node, so its
-          // offset grows with the scale. Each centred margin must hold that
-          // offset plus ~8px of text descent and halo, keeping the lowest label
-          // above the controls.
-          Math.max(20, drawingHeight - 16) / (nodeSpanHeight + 70),
-          1.3,
-        ),
-      )
+  // Compact labels and the compact drawing scale are planned together, in
+  // screen pixels under the initial camera (see domain/labels.ts).
+  const compactPlan = useMemo(
+    () =>
+      compact
+        ? planCompactLabels(selected.nodes, layout, size.width, drawingHeight)
+        : null,
+    [compact, drawingHeight, layout, selected.nodes, size.width],
+  );
+  const fit = compactPlan
+    ? compactPlan.fit
     : Math.min(
         Math.min(size.width / layout.width, size.height / layout.height) * 0.9,
         1.1,
@@ -86,36 +83,6 @@ export function Graph({
     y: (drawingHeight - layout.height * fit) / 2,
   };
   const transform = `translate(${camera.x} ${camera.y}) scale(${camera.zoom}) translate(${origin.x} ${origin.y}) scale(${fit})`;
-  // Compact labels get as many characters as fit: inside the frame, clear of
-  // labels on the same line and of neighbouring nodes. Measured under the
-  // initial camera so names do not change while panning; tight spots keep 8.
-  const compactTitleLimits = useMemo(() => {
-    const limits = new Map<string, number>();
-    if (!compact) return limits;
-    const characterWidth = 11;
-    const gap = 8;
-    const offset = Math.max(35 * fit, 18);
-    const labelTop = offset - 10;
-    const labelBottom = offset + 4;
-    const nodeRadius = 12 * fit + 2;
-    const points = selected.nodes.map((node) => {
-      const point = layout.positions.get(node.key)!;
-      return { key: node.key, x: origin.x + point.x * fit, y: origin.y + point.y * fit };
-    });
-    for (const a of points) {
-      let room = 2 * Math.min(a.x - 4, size.width - 4 - a.x);
-      for (const b of points) {
-        if (a === b) continue;
-        const dx = Math.abs(a.x - b.x);
-        if (Math.abs(a.y - b.y) < labelBottom - labelTop) room = Math.min(room, dx - gap);
-        if (b.y + nodeRadius > a.y + labelTop && b.y - nodeRadius < a.y + labelBottom)
-          room = Math.min(room, 2 * (dx - nodeRadius) - gap);
-      }
-      // One character is reserved for the ellipsis of a shortened name.
-      limits.set(a.key, Math.max(8, Math.min(16, Math.floor(room / characterWidth) - 1)));
-    }
-    return limits;
-  }, [compact, fit, layout, origin.x, origin.y, selected.nodes, size.width]);
   const position = (key: string) =>
     movedPositions.get(key) || layout.positions.get(key)!;
   const reset = () => {
@@ -372,21 +339,26 @@ export function Graph({
                 const point = position(node.key);
                 const isFocus = node.key === focus;
                 const selectedNode = node.key === active;
-                const narrow = compact || size.width < 560;
+                const narrow = size.width < 560;
+                const compactLabel = compactPlan?.labels.get(node.key);
                 const titleCharacters = Array.from(node.title);
-                const titleLimit = compact
-                  ? (compactTitleLimits.get(node.key) ?? 8)
-                  : narrow
-                    ? 18
-                    : 20;
+                const titleLimit = narrow ? 18 : 20;
                 const visibleTitle =
                   titleCharacters.length > titleLimit
-                    ? `${titleCharacters.slice(0, compact ? titleLimit : titleLimit - 1).join('')}…`
+                    ? `${titleCharacters.slice(0, titleLimit - 1).join('')}…`
                     : node.title;
-                const labelLines =
-                  !compact && narrow && visibleTitle.length > 9
-                    ? [visibleTitle.slice(0, 9), visibleTitle.slice(9)]
+                // Two-line names break at a space; a name without one keeps the 9-character cut.
+                const labelLines = compactLabel
+                  ? compactLabel.lines
+                  : narrow && Array.from(visibleTitle).length > 9
+                    ? (splitTitle(visibleTitle, 12) ?? [
+                        visibleTitle.slice(0, 9),
+                        visibleTitle.slice(9),
+                      ])
                     : [visibleTitle];
+                const labelShift = compactLabel?.shift
+                  ? compactLabel.shift / screenScale
+                  : 0;
                 const fontSize = compact
                   ? (isFocus ? 11 : 10) / screenScale
                   : Math.max(isFocus ? 21 : 19, 11 / screenScale);
@@ -447,7 +419,7 @@ export function Graph({
                         >
                           {labelLines.map((line, lineIndex) => (
                             <tspan
-                              x="0"
+                              x={labelShift}
                               dy={lineIndex ? '1.25em' : '0'}
                               key={lineIndex}
                             >

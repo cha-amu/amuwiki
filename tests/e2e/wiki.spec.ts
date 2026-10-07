@@ -382,7 +382,7 @@ test('an untrusted parent cannot release resources, and standalone embeds retain
 });
 
 for (const scope of ['local', 'all'] as const) {
-  test(`198×240 ${scope} compact graph has readable one-line labels and screen-sized hit targets`, async ({
+  test(`198×240 ${scope} compact graph has readable labels of at most two lines and screen-sized hit targets`, async ({
     page,
   }, info) => {
     const value = sixNodeFixture();
@@ -422,7 +422,7 @@ for (const scope of ['local', 'all'] as const) {
     for (const [i, label] of labels.entries()) {
       // Names are shortened only where they would leave the frame or collide.
       expect(Array.from(label.text).length).toBeLessThanOrEqual(17);
-      expect(label.lines).toBe(1);
+      expect(label.lines).toBeLessThanOrEqual(2);
       expect(label.fontSize).toBeGreaterThanOrEqual(9.99);
       expect(label.fontSize).toBeLessThanOrEqual(11.01);
       expect(label.x).toBeGreaterThanOrEqual(0);
@@ -549,6 +549,81 @@ test('958×240 wide compact graph shows whole names that fit inside the frame', 
     scale: 'css',
   });
 });
+
+// The published wiki: long titles that share words, two of them on the bottom row.
+const publishedTitlesFixture = () => {
+  const value = structuredClone(fixture);
+  const template = value.documents[0];
+  const docs: Array<[string, string, string, Array<[string, string]>]> = [
+    ['amuwiki', '아무위키', 'project', [['amuwiki-connection-map', 'uses'], ['cha-amu-github-io', 'related'], ['channel-visual-system', 'uses']]],
+    ['amuwiki-connection-map', '아무위키 연결 지도', 'concept', [['amuwiki', 'related'], ['channel-visual-system', 'uses']]],
+    ['cha-amu-github-io', '채아무 블로그', 'project', [['amuwiki', 'uses'], ['channel-visual-system', 'uses']]],
+    ['channel-visual-system', '채아무 블로그 디자인', 'concept', [['cha-amu-github-io', 'supports']]],
+  ];
+  value.documents = docs.map(([id, title, kind, links]) => ({
+    ...structuredClone(template),
+    id,
+    title,
+    kind,
+    links: links.map(([target, type]) => ({ target, type })),
+  })) as typeof value.documents;
+  value.resources = [];
+  return value;
+};
+
+for (const [scope, mapFocus] of [['local', 'doc:amuwiki'], ['all', undefined]] as const) {
+  test(`198×240 ${scope} sidebar map shows whole published names on up to two lines`, async ({
+    page,
+  }, info) => {
+    const value = publishedTitlesFixture();
+    await blogRoute(page);
+    await page.route('**/wiki.json', (route) => route.fulfill({ json: value }));
+    await page.setViewportSize({ width: 198, height: 240 });
+    await page.goto(`${embedUrl(mapFocus, scope, base)}&compact=1`);
+    await expect(page.locator('.graph-node')).toHaveCount(4);
+    await page.evaluate(() => document.fonts.ready);
+    const controls = (await page.locator('.graph-controls').boundingBox())!;
+    const labels = await page.locator('.graph-label').evaluateAll((elements) =>
+      elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        return {
+          lines: Array.from(element.children).map((line) => line.textContent!),
+          x: box.x,
+          y: box.y,
+          width: box.width,
+          height: box.height,
+        };
+      }),
+    );
+    // Every name is whole: shortened names were mistaken for one another.
+    expect(labels.map((label) => label.lines.join(' ')).sort()).toEqual(
+      value.documents.map((doc) => doc.title).sort(),
+    );
+    for (const [i, label] of labels.entries()) {
+      expect(label.lines.length).toBeLessThanOrEqual(2);
+      expect(label.x).toBeGreaterThanOrEqual(0);
+      expect(label.x + label.width).toBeLessThanOrEqual(198);
+      expect(label.y).toBeGreaterThanOrEqual(0);
+      expect(label.y + label.height).toBeLessThanOrEqual(controls.y);
+      for (const other of labels.slice(i + 1)) {
+        const overlapWidth =
+          Math.min(label.x + label.width, other.x + other.width) -
+          Math.max(label.x, other.x);
+        const overlapHeight =
+          Math.min(label.y + label.height, other.y + other.height) -
+          Math.max(label.y, other.y);
+        expect(
+          overlapWidth <= 0 || overlapHeight <= 0,
+          `${label.lines.join(' ')} overlaps ${other.lines.join(' ')}`,
+        ).toBe(true);
+      }
+    }
+    await page.screenshot({
+      path: evidence(`embed-198px-published-${scope}`, info.project.name),
+      scale: 'css',
+    });
+  });
+}
 
 test('1100×730 graph caps initial fit for one and two nodes and styles the English picker', async ({
   page,
