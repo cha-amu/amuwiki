@@ -570,7 +570,7 @@ test('1100×730 graph caps initial fit for one and two nodes and styles the Engl
       'viewBox',
       '0 0 1100 730',
     );
-    await expect(page).toHaveTitle('Connection map · Cha Amu Wiki');
+    await expect(page).toHaveTitle('Connection map · Wiki');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(
       page.getByRole('group', { name: 'Connection map', exact: true }),

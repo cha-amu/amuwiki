@@ -4,7 +4,7 @@ export type Language = 'ko' | 'en';
 
 export const graphMessages = {
   ko: {
-    documentTitle: '연결 지도 · 채아무 위키',
+    documentTitle: '연결 지도 · 아무위키',
     map: '연결 지도',
     loading: '문서를 불러오고 있어요.',
     errors: {
@@ -30,7 +30,7 @@ export const graphMessages = {
     kindLabels,
   },
   en: {
-    documentTitle: 'Connection map · Cha Amu Wiki',
+    documentTitle: 'Connection map · Wiki',
     map: 'Connection map',
     loading: 'Loading documents.',
     errors: {
