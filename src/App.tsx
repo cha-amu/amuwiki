@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { config } from './config';
-import { buildGraph } from './domain/graph';
+import { buildGraph, filterGraphResources } from './domain/graph';
+import { graphMessages } from './domain/i18n';
+import type { Language } from './domain/i18n';
 import { IndexLoadError, loadIndex } from './domain/validation';
 import type { LoadFailure } from './domain/validation';
 import type { PublicWikiIndex } from './domain/wiki';
 import { Graph } from './components/Graph';
 import { Icon } from './components/Icons';
 import { useEmbedEscape } from './hooks/useEmbedEscape';
+import { useParentResources } from './hooks/useParentResources';
 
 type IndexState =
   | { status: 'loading' }
@@ -18,15 +21,25 @@ type IndexState =
 export function App({
   focus,
   scope,
+  compact = scope === 'local',
+  resourcesFromParent = false,
+  lang = 'ko',
 }: {
   focus?: string;
   scope: 'local' | 'all';
+  compact?: boolean;
+  resourcesFromParent?: boolean;
+  lang?: Language;
 }) {
   const [state, setState] = useState<IndexState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const messages = graphMessages[lang];
+  const resources = useParentResources(resourcesFromParent);
   useEmbedEscape(true);
   useEffect(() => {
-    document.title = '연결 지도 · 채아무 위키';
+    document.title = messages.documentTitle;
+  }, [messages]);
+  useEffect(() => {
     const controller = new AbortController();
     let disposed = false;
     const timeout = window.setTimeout(() => controller.abort(), 15_000);
@@ -55,20 +68,26 @@ export function App({
     () => (index ? buildGraph(index) : { nodes: [], edges: [] }),
     [index],
   );
+  const visibleGraph = useMemo(
+    () => filterGraphResources(graph, resources.allowedKeys),
+    [graph, resources.allowedKeys],
+  );
 
   return (
-    <main className="embed-shell" aria-label="연결 지도">
-      {index ? (
+    <main className="embed-shell" aria-label={messages.map}>
+      {index && !resources.waiting ? (
         <Graph
-          graph={graph}
+          graph={visibleGraph}
           focus={focus}
           scope={scope}
           embed
-          compact={scope === 'local'}
+          compact={compact}
+          lang={lang}
         />
       ) : (
         <IndexStatus
-          state={state}
+          state={state.status === 'ready' ? { status: 'loading' } : state}
+          lang={lang}
           retry={() => setAttempt((value) => value + 1)}
         />
       )}
@@ -79,28 +98,26 @@ export function App({
 function IndexStatus({
   state,
   retry,
+  lang,
 }: {
   state: IndexState;
   retry: () => void;
+  lang: Language;
 }) {
+  const messages = graphMessages[lang];
   if (state.status === 'ready') return null;
   if (state.status === 'loading')
     return (
       <div className="load-state" role="status">
         <span className="loading-dot" />
-        <p>문서를 불러오고 있어요.</p>
+        <p>{messages.loading}</p>
       </div>
     );
-  const messages = {
-    unpublished: '아직 공개본이 없어요.',
-    network: '문서를 불러오지 못했어요.',
-    invalid: '공개본을 읽을 수 없어요.',
-  };
   return (
     <div className="error-state" role="alert">
-      <h1>{messages[state.reason]}</h1>
+      <h1>{messages.errors[state.reason]}</h1>
       <button className="button" type="button" onClick={retry}>
-        다시 불러오기
+        {messages.retry}
         <Icon name="reset" size={15} />
       </button>
     </div>

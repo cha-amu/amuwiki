@@ -190,7 +190,8 @@ svg {
   stroke-width: 5;
   paint-order: stroke;
   stroke-linejoin: round;
-  pointer-events: none;
+  pointer-events: all;
+  pointer-events: bounding-box;
 }
 .graph-label.is-focus {
   fill: var(--ink);
@@ -280,12 +281,26 @@ svg {
   max-width: calc(100% - 30px);
 }
 .graph-picker select {
+  appearance: none;
+  font: inherit;
   background: #fffefbee;
-  border: 1px solid #c9d2be;
+  border: 1.5px solid var(--ink);
   padding: 8px 27px 8px 12px;
   font-size: 12px;
   border-radius: 9px;
   max-width: 210px;
+}
+.graph-picker::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: calc(50% - 4px);
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  transform: rotate(45deg);
+  pointer-events: none;
 }
 @media (max-width: 560px) {
   .graph-picker select {

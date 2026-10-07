@@ -24,9 +24,16 @@
             if (
               event.source === frame.contentWindow &&
               event.origin === url.origin &&
-              event.data?.type === 'amuwiki:escape'
+              ['amuwiki:escape', 'amuwiki:ready'].includes(event.data?.type)
             ) {
               document.querySelector('#message').textContent = event.data.type;
+              const keys = new URLSearchParams(location.search).get('keys');
+              if (event.data.type === 'amuwiki:ready' && keys !== null) {
+                frame.contentWindow.postMessage(
+                  { type: 'amuwiki:resources', keys: JSON.parse(keys) },
+                  url.origin,
+                );
+              }
             }
           });
         }

@@ -12,9 +12,16 @@ if (route.kind === 'redirect') {
 } else {
   // Bound the iframe before rendering, including loading and failure states.
   document.documentElement.dataset.embed = 'graph';
+  document.documentElement.lang = route.lang;
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App focus={route.focus} scope={route.scope} />
+      <App
+        focus={route.focus}
+        scope={route.scope}
+        compact={route.compact}
+        resourcesFromParent={route.resourcesFromParent}
+        lang={route.lang}
+      />
     </StrictMode>,
   );
 }

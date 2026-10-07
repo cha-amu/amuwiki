@@ -44,3 +44,51 @@ export function embedParentOrigin(
   if (isLoopback(current) && isLoopback(candidate)) return candidate.origin;
   return undefined;
 }
+
+export const PARENT_RESOURCES_TIMEOUT_MS = 4_000;
+
+// Keep message validation independent of the DOM so both identity boundaries
+// and the complete payload can be checked before accepting a replacement.
+export function resourceKeysFromMessage(
+  event: { source: unknown; origin: string; data: unknown },
+  parent: unknown,
+  targetOrigin: string | undefined,
+): ReadonlySet<string> | undefined {
+  if (
+    !parent ||
+    !targetOrigin ||
+    event.source !== parent ||
+    event.origin !== targetOrigin ||
+    !event.data ||
+    typeof event.data !== 'object' ||
+    Array.isArray(event.data)
+  )
+    return undefined;
+  const data = event.data as { type?: unknown; keys?: unknown };
+  if (
+    data.type !== 'amuwiki:resources' ||
+    !Array.isArray(data.keys) ||
+    data.keys.length > 50_000
+  )
+    return undefined;
+  for (const key of data.keys) {
+    if (typeof key !== 'string' || key.length < 1 || key.length > 600)
+      return undefined;
+  }
+  return new Set(data.keys);
+}
+
+export type ParentResourcesState =
+  | { status: 'waiting' }
+  | { status: 'ready'; keys: ReadonlySet<string> };
+
+export function updateParentResources(
+  state: ParentResourcesState,
+  action: { type: 'received'; keys: ReadonlySet<string> } | { type: 'timeout' },
+): ParentResourcesState {
+  if (action.type === 'received')
+    return { status: 'ready', keys: action.keys };
+  return state.status === 'waiting'
+    ? { status: 'ready', keys: new Set() }
+    : state;
+}

@@ -72,11 +72,36 @@ export function buildGraph(index: PublicWikiIndex): WikiGraph {
   return { nodes, edges: [...edges.values()] };
 }
 
+export function filterGraphResources(
+  graph: WikiGraph,
+  allowedKeys?: ReadonlySet<string>,
+): WikiGraph {
+  if (allowedKeys === undefined) return graph;
+  const nodes = graph.nodes.filter(
+    (node) =>
+      (node.kind !== 'post' && node.kind !== 'asset') ||
+      allowedKeys.has(node.key),
+  );
+  const keys = new Set(nodes.map((node) => node.key));
+  return {
+    nodes,
+    edges: graph.edges.filter(
+      (edge) => keys.has(edge.source) && keys.has(edge.target),
+    ),
+  };
+}
+
 export function selectGraph(
   graph: WikiGraph,
   scope: 'local' | 'all',
   focus?: string,
 ): WikiGraph {
+  if (
+    focus &&
+    /^(post|asset):/u.test(focus) &&
+    !graph.nodes.some((node) => node.key === focus)
+  )
+    return { nodes: [], edges: [] };
   if (scope === 'all') return graph;
   if (!focus || !graph.nodes.some((node) => node.key === focus))
     return { nodes: [], edges: [] };

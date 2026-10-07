@@ -1,3 +1,5 @@
+import type { Language } from './i18n';
+
 export const DEFAULT_BLOG_URL = 'https://cha-amu.github.io/';
 export const DEFAULT_WIKI_URL = new URL('/wiki/', DEFAULT_BLOG_URL).href;
 export const DEFAULT_PUBLICATION_URL = new URL(
@@ -105,7 +107,14 @@ export function embedUrl(
 
 export type PublicRoute =
   | { kind: 'redirect'; url: string }
-  | { kind: 'embed'; focus?: string; scope: 'local' | 'all' };
+  | {
+      kind: 'embed';
+      focus?: string;
+      scope: 'local' | 'all';
+      compact: boolean;
+      resourcesFromParent: boolean;
+      lang: Language;
+    };
 
 // Only the graph iframe stays on the publication host. All visitor state is
 // rebuilt on the configured blog page; query strings can never choose a host.
@@ -115,12 +124,17 @@ export function publicRoute(
 ): PublicRoute {
   const current = new URL(currentUrl);
   const params = current.searchParams;
-  if (params.get('embed') === 'graph')
+  if (params.get('embed') === 'graph') {
+    const scope = params.get('scope') === 'all' ? 'all' : 'local';
     return {
       kind: 'embed',
       focus: params.get('focus') || undefined,
-      scope: params.get('scope') === 'all' ? 'all' : 'local',
+      scope,
+      compact: scope === 'local' || params.get('compact') === '1',
+      resourcesFromParent: params.get('resources') === 'parent',
+      lang: params.get('lang') === 'en' ? 'en' : 'ko',
     };
+  }
 
   const target = new URL(wikiUrl);
   target.search = '';

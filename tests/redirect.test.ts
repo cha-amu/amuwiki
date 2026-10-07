@@ -22,14 +22,11 @@ describe('publication visitor redirects', () => {
     '?embed=other',
     'index.html',
     '?next=https://evil.example',
-  ])(
-    'sends an ordinary entry to the configured blog page: %s',
-    (suffix) => {
-      expect(redirect(`${DEFAULT_PUBLICATION_URL}${suffix}`).href).toBe(
-        DEFAULT_WIKI_URL,
-      );
-    },
-  );
+  ])('sends an ordinary entry to the configured blog page: %s', (suffix) => {
+    expect(redirect(`${DEFAULT_PUBLICATION_URL}${suffix}`).href).toBe(
+      DEFAULT_WIKI_URL,
+    );
+  });
   it.each([
     '한글/문서?#%&scope=all',
     'doc:이미 접두사 있음',
@@ -38,11 +35,7 @@ describe('publication visitor redirects', () => {
   ])(
     'preserves a reserved-character document ID and its heading: %s',
     (id) => {
-      const source = documentUrl(
-        id,
-        DEFAULT_PUBLICATION_URL,
-        '문단/구분?#%',
-      );
+      const source = documentUrl(id, DEFAULT_PUBLICATION_URL, '문단/구분?#%');
       expect(redirect(source).href).toBe(
         documentUrl(id, DEFAULT_WIKI_URL, '문단/구분?#%'),
       );
@@ -63,11 +56,7 @@ describe('publication visitor redirects', () => {
       DEFAULT_WIKI_URL,
     );
   });
-  it.each([
-    'doc:읽기/기록?#%한글',
-    'post:글/한글?#%',
-    'asset:자료:a/b?x&y',
-  ])(
+  it.each(['doc:읽기/기록?#%한글', 'post:글/한글?#%', 'asset:자료:a/b?x&y'])(
     'preserves typed graph focus, scope and independent filters: %s',
     (focus) => {
       const source = new URL(
@@ -166,21 +155,39 @@ describe('embed routes stay on the publication host', () => {
   it.each(['doc:한글/문서?&scope=all#', 'post:글%#/a', 'asset:이미지:a&b'])(
     'retains the focus key and local scope: %s',
     (focus) => {
-      expect(
-        publicRoute(embedUrl(focus, 'local'), DEFAULT_WIKI_URL),
-      ).toEqual({ kind: 'embed', focus, scope: 'local' });
+      expect(publicRoute(embedUrl(focus, 'local'), DEFAULT_WIKI_URL)).toEqual(
+        {
+          kind: 'embed',
+          focus,
+          scope: 'local',
+          compact: true,
+          resourcesFromParent: false,
+          lang: 'ko',
+        },
+      );
     },
   );
   it('supports an all graph with no focus and keeps the default local scope', () => {
+    expect(publicRoute(embedUrl(undefined, 'all'), DEFAULT_WIKI_URL)).toEqual(
+      {
+        kind: 'embed',
+        focus: undefined,
+        scope: 'all',
+        compact: false,
+        resourcesFromParent: false,
+        lang: 'ko',
+      },
+    );
     expect(
-      publicRoute(embedUrl(undefined, 'all'), DEFAULT_WIKI_URL),
-    ).toEqual({ kind: 'embed', focus: undefined, scope: 'all' });
-    expect(
-      publicRoute(
-        `${DEFAULT_PUBLICATION_URL}?embed=graph`,
-        DEFAULT_WIKI_URL,
-      ),
-    ).toEqual({ kind: 'embed', focus: undefined, scope: 'local' });
+      publicRoute(`${DEFAULT_PUBLICATION_URL}?embed=graph`, DEFAULT_WIKI_URL),
+    ).toEqual({
+      kind: 'embed',
+      focus: undefined,
+      scope: 'local',
+      compact: true,
+      resourcesFromParent: false,
+      lang: 'ko',
+    });
   });
   it('does not replace unknown focus with a public node or document hash', () => {
     expect(
@@ -188,10 +195,59 @@ describe('embed routes stay on the publication host', () => {
         `${DEFAULT_PUBLICATION_URL}?embed=graph&focus=doc:unknown&scope=invalid#known`,
         DEFAULT_WIKI_URL,
       ),
-    ).toEqual({ kind: 'embed', focus: 'doc:unknown', scope: 'local' });
+    ).toEqual({
+      kind: 'embed',
+      focus: 'doc:unknown',
+      scope: 'local',
+      compact: true,
+      resourcesFromParent: false,
+      lang: 'ko',
+    });
   });
   it('uses the publication URL for embeds and the blog URL for documents by default', () => {
     expect(new URL(embedUrl(undefined, 'all')).pathname).toBe('/amuwiki/');
     expect(new URL(documentUrl('one')).pathname).toBe('/wiki/');
   });
+  it.each([
+    ['scope=all&compact=1&resources=parent&lang=en', false, true, true, 'en'],
+    [
+      'scope=local&compact=0&resources=parent&lang=ko',
+      true,
+      true,
+      true,
+      'ko',
+    ],
+    [
+      'scope=all&compact=true&resources=all&lang=EN',
+      false,
+      false,
+      false,
+      'ko',
+    ],
+    [
+      'scope=all&compact=0&resources=Parent&lang=fr',
+      false,
+      false,
+      false,
+      'ko',
+    ],
+    ['scope=invalid&lang=', true, true, false, 'ko'],
+  ])(
+    'parses only the documented embed parameters: %s',
+    (query, local, compact, resourcesFromParent, lang) => {
+      expect(
+        publicRoute(
+          `${DEFAULT_PUBLICATION_URL}?embed=graph&${query}`,
+          DEFAULT_WIKI_URL,
+        ),
+      ).toEqual({
+        kind: 'embed',
+        focus: undefined,
+        scope: local ? 'local' : 'all',
+        compact,
+        resourcesFromParent,
+        lang,
+      });
+    },
+  );
 });

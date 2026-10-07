@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import fixture from './fixtures/public-wiki.json';
 import {
   buildGraph,
+  filterGraphResources,
   layoutGraph,
   selectGraph,
   zoomCamera,
 } from '../src/domain/graph';
 import { validateIndex } from '../src/domain/validation';
-import { documentKey } from '../src/domain/wiki';
+import { documentKey, resourceKey } from '../src/domain/wiki';
 
 const index = validateIndex(fixture);
 const graph = buildGraph(index);
@@ -16,7 +17,9 @@ const focus = documentKey(index.documents[0].id);
 describe('only explicit public relationships become edges', () => {
   it('creates document and resource keys without corrupting reserved characters', () => {
     expect(graph.nodes).toHaveLength(7);
-    expect(graph.nodes.map((node) => node.key)).toContain('asset:자료:a/b?x&y');
+    expect(graph.nodes.map((node) => node.key)).toContain(
+      'asset:자료:a/b?x&y',
+    );
     expect(graph.nodes.map((node) => node.key)).toContain(
       'doc:읽기/기록?#%한글',
     );
@@ -83,6 +86,53 @@ describe('only explicit public relationships become edges', () => {
   });
   it('keeps every public node in the all view, including isolated nodes', () => {
     expect(selectGraph(graph, 'all')).toBe(graph);
+  });
+});
+
+describe('parent resources filter every graph surface before selection', () => {
+  it('keeps all resources when the parent contract is absent', () => {
+    expect(filterGraphResources(graph)).toBe(graph);
+  });
+  it('keeps documents and only the allowed resources and their edges', () => {
+    const value = structuredClone(index);
+    value.documents[0].links.push({
+      target: resourceKey(value.resources[1]),
+      type: 'uses',
+    });
+    const original = buildGraph(value);
+    const filtered = filterGraphResources(
+      original,
+      new Set([resourceKey(value.resources[0]), 'post:unknown']),
+    );
+    expect(filtered.nodes.map((node) => node.key)).toEqual([
+      ...index.documents.map((doc) => documentKey(doc.id)),
+      resourceKey(index.resources[0]),
+    ]);
+    const hiddenKey = resourceKey(index.resources[1]);
+    expect(filtered.edges).toEqual(
+      original.edges.filter(
+        (edge) => edge.source !== hiddenKey && edge.target !== hiddenKey,
+      ),
+    );
+    expect(original.nodes).toHaveLength(7);
+  });
+  it('keeps no resource placeholders or dangling links after an empty replacement', () => {
+    const filtered = filterGraphResources(graph, new Set());
+    expect(filtered.nodes).toHaveLength(index.documents.length);
+    expect(
+      filtered.edges.every(
+        (edge) =>
+          edge.source.startsWith('doc:') && edge.target.startsWith('doc:'),
+      ),
+    ).toBe(true);
+    for (const resource of index.resources) {
+      for (const scope of ['all', 'local'] as const) {
+        expect(selectGraph(filtered, scope, resourceKey(resource))).toEqual({
+          nodes: [],
+          edges: [],
+        });
+      }
+    }
   });
 });
 

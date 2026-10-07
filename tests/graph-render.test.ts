@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { Graph } from '../src/components/Graph';
 import { buildGraph } from '../src/domain/graph';
+import { graphMessages } from '../src/domain/i18n';
 import { documentUrl } from '../src/domain/navigation';
 import { validateIndex } from '../src/domain/validation';
 import fixture from './fixtures/public-wiki.json';
@@ -74,5 +75,60 @@ describe('embedded graph link contract (server render, no browser)', () => {
     expect(html).toContain('이 항목을 찾을 수 없어요.');
     expect(html).not.toContain('data-node-key');
     expect(html).not.toContain(index.documents[0].title);
+  });
+  it('hides the item picker and keeps compact labels on one line with full accessible titles', () => {
+    const html = renderToStaticMarkup(
+      createElement(Graph, { graph, scope: 'all', compact: true }),
+    );
+    expect(html).not.toContain('<select');
+    expect(html).not.toContain('dy="1.25em"');
+    expect(html).toContain('읽기에서 이어지…');
+    expect(html).toContain(`aria-label="${index.documents[0].title} · 개념"`);
+    expect(html).toContain(
+      `<title>${index.documents[0].title} · 개념</title>`,
+    );
+  });
+  it('translates visible controls, accessible names, help and all kind labels', () => {
+    const html = renderToStaticMarkup(
+      createElement(Graph, { graph, scope: 'all', lang: 'en' }),
+    );
+    for (const phrase of [
+      'Connection map',
+      'Map controls',
+      'Zoom out map',
+      'Zoom out (−)',
+      'Zoom in map',
+      'Zoom in (+)',
+      'Reset map position',
+      'Reset position (0)',
+      'Map zoom',
+      'Select a map item',
+      'Find an item',
+      graphMessages.en.help,
+    ])
+      expect(html).toContain(phrase);
+    for (const node of graph.nodes)
+      expect(html).toContain(` · ${graphMessages.en.kindLabels[node.kind]}`);
+    const empty = renderToStaticMarkup(
+      createElement(Graph, {
+        graph: { nodes: [], edges: [] },
+        scope: 'all',
+        lang: 'en',
+      }),
+    );
+    expect(empty).toContain(graphMessages.en.empty);
+    const missing = renderToStaticMarkup(
+      createElement(Graph, {
+        graph,
+        scope: 'local',
+        focus: 'doc:unknown',
+        lang: 'en',
+      }),
+    );
+    expect(missing).toContain(graphMessages.en.missingFocus);
+    const noFocus = renderToStaticMarkup(
+      createElement(Graph, { graph, scope: 'local', lang: 'en' }),
+    );
+    expect(noFocus).toContain(graphMessages.en.selectDocument);
   });
 });

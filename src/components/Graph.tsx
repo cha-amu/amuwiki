@@ -4,7 +4,9 @@ import { config } from '../config';
 import { layoutGraph, selectGraph, zoomCamera } from '../domain/graph';
 import type { Camera, GraphNode, Position, WikiGraph } from '../domain/graph';
 import { documentUrl } from '../domain/navigation';
-import { kindLabels, safeUrl } from '../domain/wiki';
+import { graphMessages } from '../domain/i18n';
+import type { Language } from '../domain/i18n';
+import { safeUrl } from '../domain/wiki';
 import { Icon } from './Icons';
 
 type Props = {
@@ -13,6 +15,7 @@ type Props = {
   scope: 'local' | 'all';
   embed?: boolean;
   compact?: boolean;
+  lang?: Language;
 };
 type Drag = {
   id: number;
@@ -35,7 +38,9 @@ export function Graph({
   scope,
   embed = false,
   compact = false,
+  lang = 'ko',
 }: Props) {
+  const messages = graphMessages[lang];
   const selected = useMemo(
     () => selectGraph(graph, scope, focus),
     [graph, scope, focus],
@@ -60,12 +65,16 @@ export function Graph({
     ? Math.max(
         0.02,
         Math.min(
-          Math.max(20, size.width - 110) / Math.max(100, layout.width - 220),
-          Math.max(20, drawingHeight - 80) / Math.max(80, layout.height - 160),
+          Math.max(20, size.width - 72) / Math.max(100, layout.width - 220),
+          Math.max(20, drawingHeight - 50) / Math.max(80, layout.height - 160),
           1.3,
         ),
       )
-    : Math.min(size.width / layout.width, size.height / layout.height) * 0.9;
+    : Math.min(
+        Math.min(size.width / layout.width, size.height / layout.height) * 0.9,
+        1.1,
+      );
+  const screenScale = fit * camera.zoom;
   const origin = {
     x: (size.width - layout.width * fit) / 2,
     y: (drawingHeight - layout.height * fit) / 2,
@@ -234,7 +243,6 @@ export function Graph({
       ?.focus();
   };
   const missingFocus =
-    scope === 'local' &&
     !!focus &&
     !graph.nodes.some((node) => node.key === focus);
 
@@ -245,25 +253,23 @@ export function Graph({
           <Icon name="map" size={28} />
           <span>
             {missingFocus
-              ? '이 항목을 찾을 수 없어요.'
+              ? messages.missingFocus
               : scope === 'local' && !focus && graph.nodes.length
-                ? '문서를 선택하면 연결이 보여요.'
-                : '아직 공개된 문서가 없어요.'}
+                ? messages.selectDocument
+                : messages.empty}
           </span>
         </div>
       ) : (
         <>
           <p className="sr-only" id={helpId}>
-            방향키로 지도를 이동하고, 더하기와 빼기로 확대하거나 축소할 수
-            있어요. 탭으로 항목을 선택하고 엔터로 열어요. 시프트와 방향키로
-            선택한 항목을 옮겨요.
+            {messages.help}
           </p>
           <svg
             ref={svg}
             className="graph-canvas"
             viewBox={`0 0 ${size.width} ${size.height}`}
             role="group"
-            aria-label="연결 지도"
+            aria-label={messages.map}
             aria-describedby={helpId}
             tabIndex={0}
             onPointerDown={startDrag}
@@ -327,18 +333,18 @@ export function Graph({
                 const selectedNode = node.key === active;
                 const narrow = compact || size.width < 560;
                 const titleCharacters = Array.from(node.title);
-                const titleLimit = narrow ? 18 : 20;
+                const titleLimit = compact ? 8 : narrow ? 18 : 20;
                 const visibleTitle =
                   titleCharacters.length > titleLimit
-                    ? `${titleCharacters.slice(0, titleLimit - 1).join('')}…`
+                    ? `${titleCharacters.slice(0, compact ? titleLimit : titleLimit - 1).join('')}…`
                     : node.title;
                 const labelLines =
-                  narrow && visibleTitle.length > 9
+                  !compact && narrow && visibleTitle.length > 9
                     ? [visibleTitle.slice(0, 9), visibleTitle.slice(9)]
                     : [visibleTitle];
                 const fontSize = compact
-                  ? (isFocus ? 11 : 10) / fit
-                  : Math.max(isFocus ? 21 : 19, 11 / (fit * camera.zoom));
+                  ? (isFocus ? 11 : 10) / screenScale
+                  : Math.max(isFocus ? 21 : 19, 11 / screenScale);
                 const labelVisible =
                   selected.nodes.length <= 30 ||
                   fit * camera.zoom >= 0.65 ||
@@ -357,13 +363,16 @@ export function Graph({
                       data-node-index={index}
                       data-kind={node.kind}
                       className={`graph-node ${isFocus ? 'is-focus' : ''} ${selectedNode ? 'is-selected' : ''}`}
-                      aria-label={`${node.title} · ${kindLabels[node.kind]}`}
+                      aria-label={`${node.title} · ${messages.kindLabels[node.kind]}`}
                       tabIndex={0}
                       onFocus={() => setActive(node.key)}
                       onMouseEnter={() => setActive(node.key)}
                     >
-                      <title>{`${node.title} · ${kindLabels[node.kind]}`}</title>
-                      <circle className="graph-node-hit" r="24" />
+                      <title>{`${node.title} · ${messages.kindLabels[node.kind]}`}</title>
+                      <circle
+                        className="graph-node-hit"
+                        r={Math.max(24, 14 / screenScale)}
+                      />
                       {isFocus && (
                         <circle className="graph-focus-ring" r="20" />
                       )}
@@ -384,9 +393,12 @@ export function Graph({
                       )}
                       {labelVisible && (
                         <text
-                          y="35"
+                          y={compact ? Math.max(35, 18 / screenScale) : 35}
                           textAnchor="middle"
-                          style={{ fontSize }}
+                          style={{
+                            fontSize,
+                            ...(compact ? { strokeWidth: 2 / screenScale } : {}),
+                          }}
                           className={
                             isFocus ? 'graph-label is-focus' : 'graph-label'
                           }
@@ -408,23 +420,23 @@ export function Graph({
               })}
             </g>
           </svg>
-          <div className="graph-controls" aria-label="지도 조절">
+          <div className="graph-controls" aria-label={messages.controls}>
             <button
               type="button"
-              aria-label="지도 축소"
-              title="축소 (−)"
+              aria-label={messages.zoomOut}
+              title={messages.zoomOutTitle}
               onClick={() => zoom(1 / 1.25)}
               disabled={camera.zoom <= 0.2}
             >
               −
             </button>
-            <output aria-label="지도 배율">
+            <output aria-label={messages.scale}>
               {Math.round(camera.zoom * 100)}%
             </output>
             <button
               type="button"
-              aria-label="지도 확대"
-              title="확대 (+)"
+              aria-label={messages.zoomIn}
+              title={messages.zoomInTitle}
               onClick={() => zoom(1.25)}
               disabled={camera.zoom >= 6}
             >
@@ -432,8 +444,8 @@ export function Graph({
             </button>
             <button
               type="button"
-              aria-label="지도 처음 위치"
-              title="처음 위치 (0)"
+              aria-label={messages.reset}
+              title={messages.resetTitle}
               onClick={reset}
             >
               <Icon name="reset" size={16} />
@@ -442,7 +454,7 @@ export function Graph({
           {!compact && (
             <div className="graph-picker">
               <label className="sr-only" htmlFor={`${instanceId}-picker`}>
-                지도의 항목 선택
+                {messages.selectItem}
               </label>
               <select
                 id={`${instanceId}-picker`}
@@ -450,7 +462,7 @@ export function Graph({
                 onChange={(event) => revealNode(event.target.value)}
               >
                 <option value="" disabled>
-                  항목 찾기
+                  {messages.findItem}
                 </option>
                 {selected.nodes.map((node) => (
                   <option key={node.key} value={node.key}>
