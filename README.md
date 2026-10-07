@@ -32,7 +32,7 @@ VITE_BLOG_URL=http://127.0.0.1:5178/ npm run build
 
 ## 공개본과 개인정보 경계
 
-`public/wiki.json`은 현재 문서 0개·자료 0개의 공개본입니다. 발행한 문서가 없을 때 빈 지도는 정상이며, 검수용 데이터를 공개본에 넣지 않습니다. JSON endpoint는 기본 `https://cha-amu.github.io/amuwiki/wiki.json`이고 리다이렉트 대상이 아닙니다.
+`public/wiki.json`에는 공개 대상으로 선택해 발행한 문서와 연결 자료를 담습니다. 발행한 문서가 없을 때 빈 지도는 정상이며, 검수용 데이터를 공개본에 넣지 않습니다. JSON endpoint는 기본 `https://cha-amu.github.io/amuwiki/wiki.json`이고 리다이렉트 대상이 아닙니다.
 
 데이터 계약은 `src/domain/wiki.ts`, 검증은 `src/domain/validation.ts`에 있습니다. 공개를 허용한 문서·링크·출처·자료만 입력해야 합니다. 이 프로젝트는 개인 원본 저장소에 접근하거나 공개/비공개를 분류하는 exporter 역할을 하지 않습니다.
 
