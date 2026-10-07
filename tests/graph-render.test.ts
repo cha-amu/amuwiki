@@ -82,7 +82,11 @@ describe('embedded graph link contract (server render, no browser)', () => {
     );
     expect(html).not.toContain('<select');
     expect(html).not.toContain('dy="1.25em"');
-    expect(html).toContain('읽기에서 이어지…');
+    // The server render uses the default 500px canvas, where whole names fit.
+    // Narrow frames shorten them; the 198px browser test covers that case.
+    expect(html).toContain(
+      `<tspan x="0" dy="0">${index.documents[0].title}</tspan>`,
+    );
     expect(html).toContain(`aria-label="${index.documents[0].title} · 개념"`);
     expect(html).toContain(
       `<title>${index.documents[0].title} · 개념</title>`,

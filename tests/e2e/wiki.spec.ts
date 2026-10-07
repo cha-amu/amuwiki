@@ -420,7 +420,8 @@ for (const scope of ['local', 'all'] as const) {
         }),
       );
     for (const [i, label] of labels.entries()) {
-      expect(Array.from(label.text).length).toBeLessThanOrEqual(9);
+      // Names are shortened only where they would leave the frame or collide.
+      expect(Array.from(label.text).length).toBeLessThanOrEqual(17);
       expect(label.lines).toBe(1);
       expect(label.fontSize).toBeGreaterThanOrEqual(9.99);
       expect(label.fontSize).toBeLessThanOrEqual(11.01);
@@ -496,12 +497,55 @@ test('341×240 two-node compact graph keeps every label above the map controls',
   const controls = (await page.locator('.graph-controls').boundingBox())!;
   for (const label of await page.locator('.graph-label').all()) {
     const box = (await label.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(341);
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height).toBeLessThanOrEqual(198);
     expect(box.y + box.height).toBeLessThanOrEqual(controls.y);
   }
   await page.screenshot({
     path: evidence('embed-341px-two-nodes', info.project.name),
+    scale: 'css',
+  });
+});
+
+test('958×240 wide compact graph shows whole names that fit inside the frame', async ({
+  page,
+}, info) => {
+  // Below 1400px the blog shows the compact map as a wide bar; short names
+  // must not be cut to the eight characters a 198px sidebar needs.
+  const value = twoNodeFixture();
+  await blogRoute(page);
+  await page.route('**/wiki.json', (route) =>
+    route.fulfill({ json: value }),
+  );
+  await page.setViewportSize({ width: 958, height: 240 });
+  await page.goto(`${embedUrl(focus, 'local', base)}&compact=1`);
+  await expect(page.locator('.graph-node')).toHaveCount(2);
+  await page.evaluate(() => document.fonts.ready);
+  const labels = await page.locator('.graph-label').evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        text: element.textContent!,
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+      };
+    }),
+  );
+  expect(labels.map((label) => label.text).sort()).toEqual(
+    value.documents.map((doc) => doc.title).sort(),
+  );
+  for (const label of labels) {
+    expect(label.x).toBeGreaterThanOrEqual(0);
+    expect(label.x + label.width).toBeLessThanOrEqual(958);
+    expect(label.y).toBeGreaterThanOrEqual(0);
+    expect(label.y + label.height).toBeLessThanOrEqual(198);
+  }
+  await page.screenshot({
+    path: evidence('embed-958px-two-nodes', info.project.name),
     scale: 'css',
   });
 });

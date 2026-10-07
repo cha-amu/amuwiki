@@ -100,7 +100,7 @@ svg {
   justify-content: center;
   gap: 10px;
   padding: 18px 15px;
-  color: #747c70;
+  color: #6d6d6d;
   font-size: 13px;
   text-align: center;
 }
@@ -145,11 +145,11 @@ svg {
   cursor: grabbing;
 }
 .graph-edges line {
-  stroke: #bacbb4;
+  stroke: #7a9a75;
   stroke-width: 1.4;
 }
 .graph-edges line.is-active {
-  stroke: #7a9a75;
+  stroke: #4f6b4b;
   stroke-width: 2;
 }
 .graph-node {
@@ -183,7 +183,7 @@ svg {
   stroke-dasharray: 3 4;
 }
 .graph-label {
-  fill: #50594a;
+  fill: var(--ink);
   font-family: var(--hand);
   font-size: 19px;
   stroke: #fbfcf8;
@@ -216,10 +216,10 @@ svg {
   gap: 0;
   align-items: center;
   min-height: 34px;
-  border: 1px solid #c8d0c0;
-  border-radius: 10px;
-  background: #fffefbed;
-  box-shadow: 0 2px 5px #46553f0d;
+  /* Matches the blog's pill controls: ink outline, white face. */
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
   overflow: hidden;
 }
 .graph-controls button {
@@ -232,16 +232,16 @@ svg {
   line-height: 1;
 }
 .graph-controls button:hover {
-  background: #e9f3e2;
+  background: #e8f4eb;
 }
 .graph-controls button:last-child {
-  border-left: 1px solid #e2e5dc;
+  border-left: 1px solid #d9d9d2;
 }
 .graph-controls output {
   font-size: 10px;
   min-width: 40px;
   text-align: center;
-  color: #718068;
+  color: #6d6d6d;
 }
 .graph--compact .graph-controls {
   bottom: 8px;
@@ -265,7 +265,7 @@ svg {
   gap: 14px;
   align-items: center;
   justify-content: center;
-  color: #909982;
+  color: #6d6d6d;
   padding: 18px;
   text-align: center;
   font-size: 11px;
@@ -283,11 +283,11 @@ svg {
 .graph-picker select {
   appearance: none;
   font: inherit;
-  background: #fffefbee;
+  background: #fff;
   border: 1.5px solid var(--ink);
   padding: 8px 27px 8px 12px;
   font-size: 12px;
-  border-radius: 9px;
+  border-radius: 999px;
   max-width: 210px;
 }
 .graph-picker::after {

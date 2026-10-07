@@ -86,6 +86,36 @@ export function Graph({
     y: (drawingHeight - layout.height * fit) / 2,
   };
   const transform = `translate(${camera.x} ${camera.y}) scale(${camera.zoom}) translate(${origin.x} ${origin.y}) scale(${fit})`;
+  // Compact labels get as many characters as fit: inside the frame, clear of
+  // labels on the same line and of neighbouring nodes. Measured under the
+  // initial camera so names do not change while panning; tight spots keep 8.
+  const compactTitleLimits = useMemo(() => {
+    const limits = new Map<string, number>();
+    if (!compact) return limits;
+    const characterWidth = 11;
+    const gap = 8;
+    const offset = Math.max(35 * fit, 18);
+    const labelTop = offset - 10;
+    const labelBottom = offset + 4;
+    const nodeRadius = 12 * fit + 2;
+    const points = selected.nodes.map((node) => {
+      const point = layout.positions.get(node.key)!;
+      return { key: node.key, x: origin.x + point.x * fit, y: origin.y + point.y * fit };
+    });
+    for (const a of points) {
+      let room = 2 * Math.min(a.x - 4, size.width - 4 - a.x);
+      for (const b of points) {
+        if (a === b) continue;
+        const dx = Math.abs(a.x - b.x);
+        if (Math.abs(a.y - b.y) < labelBottom - labelTop) room = Math.min(room, dx - gap);
+        if (b.y + nodeRadius > a.y + labelTop && b.y - nodeRadius < a.y + labelBottom)
+          room = Math.min(room, 2 * (dx - nodeRadius) - gap);
+      }
+      // One character is reserved for the ellipsis of a shortened name.
+      limits.set(a.key, Math.max(8, Math.min(16, Math.floor(room / characterWidth) - 1)));
+    }
+    return limits;
+  }, [compact, fit, layout, origin.x, origin.y, selected.nodes, size.width]);
   const position = (key: string) =>
     movedPositions.get(key) || layout.positions.get(key)!;
   const reset = () => {
@@ -304,7 +334,7 @@ export function Graph({
                 markerHeight="5"
                 orient="auto-start-reverse"
               >
-                <path d="M1 1 7 4 1 7" fill="none" stroke="#8f9e92" />
+                <path d="M1 1 7 4 1 7" fill="none" stroke="#5b7a56" />
               </marker>
             </defs>
             <g data-camera="true" transform={transform}>
@@ -339,7 +369,11 @@ export function Graph({
                 const selectedNode = node.key === active;
                 const narrow = compact || size.width < 560;
                 const titleCharacters = Array.from(node.title);
-                const titleLimit = compact ? 8 : narrow ? 18 : 20;
+                const titleLimit = compact
+                  ? (compactTitleLimits.get(node.key) ?? 8)
+                  : narrow
+                    ? 18
+                    : 20;
                 const visibleTitle =
                   titleCharacters.length > titleLimit
                     ? `${titleCharacters.slice(0, compact ? titleLimit : titleLimit - 1).join('')}…`
