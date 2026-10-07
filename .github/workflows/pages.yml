@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  repository_dispatch:
+    types: [amuwiki-publish]
 
 permissions:
   contents: read
@@ -21,11 +23,17 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      # The public snapshot is never committed. Publishing replaces this release asset.
+      - name: Download published wiki data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download wiki-data --repo "$GITHUB_REPOSITORY" --pattern wiki.json --dir public --clobber
       - run: npm test
       - run: npm run build
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: dist
+          retention-days: 1
   deploy:
     needs: build
     runs-on: ubuntu-latest
