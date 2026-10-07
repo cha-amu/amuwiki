@@ -70,6 +70,16 @@ const sixNodeFixture = () => {
   for (const resource of value.resources) resource.documentIds = [documentId];
   return value;
 };
+const twoNodeFixture = () => {
+  const value = structuredClone(fixture);
+  value.documents = value.documents.slice(0, 2);
+  value.documents[0].links = [
+    { target: `doc:${value.documents[1].id}`, type: 'uses' },
+  ];
+  value.documents[1].links = [];
+  value.resources = [];
+  return value;
+};
 
 test('visitor routes redirect to the blog without fetching the public index', async ({
   page,
@@ -468,6 +478,33 @@ for (const scope of ['local', 'all'] as const) {
     expect(page.url()).toBe(documentUrl(documentId, wikiUrl));
   });
 }
+
+test('341×240 two-node compact graph keeps every label above the map controls', async ({
+  page,
+}, info) => {
+  // A phone-width map with few nodes reaches the largest compact scale, where
+  // the label offset grows with the drawing and once slid under the controls.
+  const value = twoNodeFixture();
+  await blogRoute(page);
+  await page.route('**/wiki.json', (route) =>
+    route.fulfill({ json: value }),
+  );
+  await page.setViewportSize({ width: 341, height: 240 });
+  await page.goto(`${embedUrl(focus, 'local', base)}&compact=1`);
+  await expect(page.locator('.graph-node')).toHaveCount(2);
+  await page.evaluate(() => document.fonts.ready);
+  const controls = (await page.locator('.graph-controls').boundingBox())!;
+  for (const label of await page.locator('.graph-label').all()) {
+    const box = (await label.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(198);
+    expect(box.y + box.height).toBeLessThanOrEqual(controls.y);
+  }
+  await page.screenshot({
+    path: evidence('embed-341px-two-nodes', info.project.name),
+    scale: 'css',
+  });
+});
 
 test('1100×730 graph caps initial fit for one and two nodes and styles the English picker', async ({
   page,

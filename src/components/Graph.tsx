@@ -61,12 +61,18 @@ export function Graph({
   // Small embeds reserve screen-space margins for readable labels and controls;
   // merely scaling the entire desktop drawing can clip a label at 190px wide.
   const drawingHeight = compact ? Math.max(40, size.height - 42) : size.height;
+  const nodeSpanHeight = Math.max(80, layout.height - 160);
   const fit = compact
     ? Math.max(
         0.02,
         Math.min(
           Math.max(20, size.width - 72) / Math.max(100, layout.width - 220),
-          Math.max(20, drawingHeight - 50) / Math.max(80, layout.height - 160),
+          Math.max(20, drawingHeight - 50) / nodeSpanHeight,
+          // Above ~0.5x a label sits 35 drawing units below its node, so its
+          // offset grows with the scale. Each centred margin must hold that
+          // offset plus ~8px of text descent and halo, keeping the lowest label
+          // above the controls.
+          Math.max(20, drawingHeight - 16) / (nodeSpanHeight + 70),
           1.3,
         ),
       )
