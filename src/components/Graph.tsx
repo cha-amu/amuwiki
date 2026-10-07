@@ -325,23 +325,32 @@ export function Graph({
             }}
           >
             <defs>
-              <marker
-                id={`${instanceId}-arrow`}
-                viewBox="0 0 8 8"
-                refX="17"
-                refY="4"
-                markerWidth="5"
-                markerHeight="5"
-                orient="auto-start-reverse"
-              >
-                <path d="M1 1 7 4 1 7" fill="none" stroke="#5b7a56" />
-              </marker>
+              {/* Arrowheads follow their line: grey, or ink when the line is active. */}
+              {[
+                ['arrow', '#848484'],
+                ['arrow-active', '#1f1f1f'],
+              ].map(([name, color]) => (
+                <marker
+                  key={name}
+                  id={`${instanceId}-${name}`}
+                  viewBox="0 0 8 8"
+                  refX="17"
+                  refY="4"
+                  markerWidth="5"
+                  markerHeight="5"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M1 1 7 4 1 7" fill="none" stroke={color} />
+                </marker>
+              ))}
             </defs>
             <g data-camera="true" transform={transform}>
               <g className="graph-edges" aria-hidden="true">
                 {selected.edges.map((edge) => {
                   const a = position(edge.source);
                   const b = position(edge.target);
+                  const isActive =
+                    edge.source === active || edge.target === active;
                   return (
                     <line
                       key={edge.key}
@@ -349,15 +358,11 @@ export function Graph({
                       y1={a.y}
                       x2={b.x}
                       y2={b.y}
-                      className={
-                        edge.source === active || edge.target === active
-                          ? 'is-active'
-                          : ''
-                      }
+                      className={isActive ? 'is-active' : ''}
                       markerEnd={
                         edge.type === 'reference' || edge.type === 'related'
                           ? undefined
-                          : `url(#${instanceId}-arrow)`
+                          : `url(#${instanceId}-${isActive ? 'arrow-active' : 'arrow'})`
                       }
                     />
                   );
@@ -413,9 +418,6 @@ export function Graph({
                         className="graph-node-hit"
                         r={Math.max(24, 14 / screenScale)}
                       />
-                      {isFocus && (
-                        <circle className="graph-focus-ring" r="20" />
-                      )}
                       {isResource(node) ? (
                         <rect
                           className="graph-node-shape"
