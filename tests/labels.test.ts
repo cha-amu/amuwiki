@@ -45,13 +45,23 @@ describe('splitTitle', () => {
 
 describe('planCompactLabels', () => {
   // The blog sidebar map is 198×240; the bottom 42px hold the zoom controls.
-  for (const [scope, focus] of [
-    ['local', 'doc:amuwiki'],
-    ['all', undefined],
+  for (const [scope, focus, unconnected] of [
+    ['local', 'doc:amuwiki', false],
+    ['all', undefined, false],
+    ['all', undefined, true],
   ] as const) {
-    it(`keeps every published ${scope} name whole within the 198px sidebar frame`, () => {
-      const selected = selectGraph(buildGraph(published()), scope, focus);
-      const layout = layoutGraph(selected, focus);
+    it(`keeps every published ${scope} name whole within the 198px sidebar frame${unconnected ? ', with a document that has no links' : ''}`, () => {
+      const value = published();
+      if (unconnected)
+        value.documents.push({
+          ...structuredClone(value.documents[0]),
+          id: 'proof-and-confirmation',
+          title: '증명과 입증',
+          kind: 'concept',
+          links: [],
+        });
+      const selected = selectGraph(buildGraph(value), scope, focus);
+      const layout = layoutGraph(selected, focus, 1);
       const plan = planCompactLabels(selected.nodes, layout, 198, 198);
       const originY = (198 - layout.height * plan.fit) / 2;
       const offset = Math.max(35 * plan.fit, 18);

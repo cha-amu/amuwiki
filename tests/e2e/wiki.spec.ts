@@ -625,6 +625,77 @@ for (const [scope, mapFocus] of [['local', 'doc:amuwiki'], ['all', undefined]] a
   });
 }
 
+test('198×240 sidebar maps draw a document without links as its own dot, apart in the full map', async ({
+  page,
+}, info) => {
+  const value = publishedTitlesFixture();
+  value.documents.push({
+    ...structuredClone(value.documents[0]),
+    id: 'proof-and-confirmation',
+    title: '증명과 입증',
+    links: [],
+  });
+  await blogRoute(page);
+  await page.route('**/wiki.json', (route) => route.fulfill({ json: value }));
+  await page.setViewportSize({ width: 198, height: 240 });
+  await page.goto(`${embedUrl(undefined, 'all', base)}&compact=1`);
+  await expect(page.locator('.graph-node')).toHaveCount(5);
+  await page.evaluate(() => document.fonts.ready);
+  const controls = (await page.locator('.graph-controls').boundingBox())!;
+  const nodes = await page.locator('.graph-node').evaluateAll((elements) =>
+    elements.map((element) => {
+      const shape = element
+        .querySelector('.graph-node-shape')!
+        .getBoundingClientRect();
+      const label = element.querySelector('.graph-label')!;
+      const box = label.getBoundingClientRect();
+      return {
+        key: element.getAttribute('data-node-key')!,
+        name: Array.from(label.children)
+          .map((line) => line.textContent)
+          .join(' '),
+        x: shape.x + shape.width / 2,
+        y: shape.y + shape.height / 2,
+        label: { x: box.x, right: box.right, bottom: box.bottom },
+      };
+    }),
+  );
+  const lonely = nodes.find((node) => node.key === 'doc:proof-and-confirmation')!;
+  const others = nodes.filter((node) => node !== lonely);
+  // The square sidebar sets it below the connected documents, clear of their names.
+  expect(
+    lonely.y - Math.max(...others.map((node) => node.y)),
+  ).toBeGreaterThanOrEqual(40);
+  expect(lonely.y - 8).toBeGreaterThan(
+    Math.max(...others.map((node) => node.label.bottom)),
+  );
+  for (const node of nodes) {
+    expect(node.name).toBe(
+      value.documents.find((doc) => `doc:${doc.id}` === node.key)!.title,
+    );
+    expect(node.label.x).toBeGreaterThanOrEqual(0);
+    expect(node.label.right).toBeLessThanOrEqual(198);
+    expect(node.label.bottom).toBeLessThanOrEqual(controls.y);
+  }
+  await page.screenshot({
+    path: evidence('embed-198px-unconnected-all', info.project.name),
+    scale: 'css',
+  });
+  // Its own map is the single dot, drawn no larger than in an ordinary map.
+  await page.goto(
+    `${embedUrl('doc:proof-and-confirmation', 'local', base)}&compact=1`,
+  );
+  await expect(page.locator('.graph-node')).toHaveCount(1);
+  await expect(page.locator('.graph-label')).toHaveText('증명과 입증');
+  expect(
+    (await page.locator('.graph-node-shape').boundingBox())!.width,
+  ).toBeLessThanOrEqual(16);
+  await page.screenshot({
+    path: evidence('embed-198px-unconnected-local', info.project.name),
+    scale: 'css',
+  });
+});
+
 test('1100×730 graph caps initial fit for one and two nodes and styles the English picker', async ({
   page,
 }, info) => {

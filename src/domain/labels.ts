@@ -4,6 +4,9 @@ import type { GraphLayout, GraphNode } from './graph';
 export const LABEL_CHARACTER_WIDTH = 11;
 export const LABEL_LINE_HEIGHT = 13;
 const LABEL_GAP = 8;
+// The largest compact scale. A map of one or two items would otherwise be drawn
+// up to twice as large as a typical map, with its names left far below the dots.
+export const COMPACT_MAX_FIT = 0.6;
 
 export type CompactLabel = {
   lines: string[];
@@ -69,7 +72,7 @@ export function compactFit(
       // keeping the lowest label above the controls.
       Math.max(20, drawingHeight - 16 - 2 * LABEL_LINE_HEIGHT * extraLines) /
         (nodeSpanHeight + 70),
-      1.3,
+      COMPACT_MAX_FIT,
     ),
   );
 }

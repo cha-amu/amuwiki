@@ -5,6 +5,7 @@ import {
   filterGraphResources,
   layoutGraph,
   selectGraph,
+  UNCONNECTED_GAP,
   zoomCamera,
 } from '../src/domain/graph';
 import { validateIndex } from '../src/domain/validation';
@@ -178,5 +179,46 @@ describe('bounded, deterministic graph layout and camera', () => {
     );
     expect(zoomCamera(camera, 1000, point).zoom).toBe(6);
     expect(zoomCamera(camera, 0.0001, point).zoom).toBe(0.2);
+  });
+});
+
+describe('items without any connection', () => {
+  const all = selectGraph(graph, 'all');
+  const lonely = documentKey('fixture-only-amu-test');
+  const apart = (layout: ReturnType<typeof layoutGraph>) => {
+    const others = all.nodes
+      .filter((node) => node.key !== lonely)
+      .map((node) => layout.positions.get(node.key)!);
+    const point = layout.positions.get(lonely)!;
+    return {
+      right: point.x - Math.max(...others.map((other) => other.x)),
+      below: point.y - Math.max(...others.map((other) => other.y)),
+    };
+  };
+  it('gather beside the connected ones in a wide frame and below them in a tall one', () => {
+    const wide = layoutGraph(all, undefined, 4);
+    expect(apart(wide).right).toBeGreaterThanOrEqual(UNCONNECTED_GAP - 1e-9);
+    const tall = layoutGraph(all, undefined, 0.5);
+    expect(apart(tall).below).toBeGreaterThanOrEqual(UNCONNECTED_GAP - 1e-9);
+    expect(tall).toEqual(layoutGraph(all, undefined, 0.5));
+  });
+  it('keep an unconnected focus in their group instead of anchoring the connected ones', () => {
+    expect(layoutGraph(all, lonely, 1.5)).toEqual(
+      layoutGraph(all, undefined, 1.5),
+    );
+  });
+  it('line up in a row or a column to suit the frame', () => {
+    const nodes = ['가', '나', '다'].map((id) => ({
+      key: documentKey(id),
+      id,
+      title: id,
+      kind: 'concept' as const,
+    }));
+    const row = layoutGraph({ nodes, edges: [] }, undefined, 4);
+    expect(new Set([...row.positions.values()].map((p) => p.y)).size).toBe(1);
+    const column = layoutGraph({ nodes, edges: [] }, undefined, 0.3);
+    expect(new Set([...column.positions.values()].map((p) => p.x)).size).toBe(
+      1,
+    );
   });
 });

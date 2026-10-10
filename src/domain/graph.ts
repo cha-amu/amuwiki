@@ -118,9 +118,23 @@ export function selectGraph(
   };
 }
 
+// Items without any connection gather in a grid this far from the connected
+// ones, so the empty space itself shows that nothing links them.
+export const UNCONNECTED_GAP = 160;
+const UNCONNECTED_COLUMN_STEP = 200;
+const UNCONNECTED_ROW_STEP = 130;
+const MARGIN_X = 220;
+const MARGIN_Y = 160;
+
 // Deterministic, finite layout. No animation loop, timers, physics subscriptions or workers.
-// Breadth-first ordering is O(V + E); collision relaxation is capped at 120 nodes / 60 passes.
-export function layoutGraph(graph: WikiGraph, focus?: string): GraphLayout {
+// Breadth-first ordering is O(V + E); collision relaxation is capped at 120 connected nodes / 60 passes.
+// `aspect` is the frame's width ÷ height: unconnected items go beside or below
+// the connected ones, whichever keeps the whole drawing larger in that frame.
+export function layoutGraph(
+  graph: WikiGraph,
+  focus?: string,
+  aspect = 1.5,
+): GraphLayout {
   const positions = new Map<string, Position>();
   if (!graph.nodes.length) return { positions, width: 360, height: 260 };
   const neighbors = new Map(
@@ -130,7 +144,50 @@ export function layoutGraph(graph: WikiGraph, focus?: string): GraphLayout {
     neighbors.get(edge.source)?.add(edge.target);
     neighbors.get(edge.target)?.add(edge.source);
   }
-  const roots = [...graph.nodes].sort(
+  const connected = graph.nodes.filter(
+    (node) => (neighbors.get(node.key)?.size || 0) > 0,
+  );
+  const unconnected = graph.nodes
+    .filter((node) => !neighbors.get(node.key)?.size)
+    .sort(
+      (a, b) =>
+        Number(b.key === focus) - Number(a.key === focus) ||
+        a.key.localeCompare(b.key),
+    );
+  // Only a connected focus anchors the drawing; an unconnected one stays in its group.
+  const pinned = connected.some((node) => node.key === focus)
+    ? focus
+    : undefined;
+  layoutConnected(connected, graph.edges, neighbors, pinned, positions);
+  placeUnconnected(unconnected, positions, aspect);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const position of positions.values()) {
+    minX = Math.min(minX, position.x);
+    minY = Math.min(minY, position.y);
+    maxX = Math.max(maxX, position.x);
+    maxY = Math.max(maxY, position.y);
+  }
+  const width = Math.max(320, maxX - minX + MARGIN_X);
+  const height = Math.max(240, maxY - minY + MARGIN_Y);
+  for (const position of positions.values()) {
+    position.x += (width - maxX - minX) / 2;
+    position.y += (height - maxY - minY) / 2;
+  }
+  return { positions, width, height };
+}
+
+function layoutConnected(
+  nodes: readonly GraphNode[],
+  edges: readonly GraphEdge[],
+  neighbors: ReadonlyMap<string, ReadonlySet<string>>,
+  focus: string | undefined,
+  positions: Map<string, Position>,
+) {
+  if (!nodes.length) return;
+  const roots = [...nodes].sort(
     (a, b) =>
       Number(b.key === focus) - Number(a.key === focus) ||
       (neighbors.get(b.key)?.size || 0) - (neighbors.get(a.key)?.size || 0) ||
@@ -161,10 +218,10 @@ export function layoutGraph(graph: WikiGraph, focus?: string): GraphLayout {
       y: Math.sin(angle) * radius,
     });
   });
-  if (graph.nodes.length <= 120) {
+  if (nodes.length <= 120) {
     for (let step = 0; step < 60; step++) {
       const cooling = 1 - step / 70;
-      for (const edge of graph.edges) {
+      for (const edge of edges) {
         const a = positions.get(edge.source)!;
         const b = positions.get(edge.target)!;
         const dx = b.x - a.x;
@@ -205,23 +262,69 @@ export function layoutGraph(graph: WikiGraph, focus?: string): GraphLayout {
       }
     }
   }
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const position of positions.values()) {
-    minX = Math.min(minX, position.x);
-    minY = Math.min(minY, position.y);
-    maxX = Math.max(maxX, position.x);
-    maxY = Math.max(maxY, position.y);
+}
+
+function placeUnconnected(
+  nodes: readonly GraphNode[],
+  positions: Map<string, Position>,
+  aspect: number,
+) {
+  if (!nodes.length) return;
+  const points = [...positions.values()];
+  const cluster = points.length
+    ? {
+        minX: Math.min(...points.map((point) => point.x)),
+        maxX: Math.max(...points.map((point) => point.x)),
+        minY: Math.min(...points.map((point) => point.y)),
+        maxY: Math.max(...points.map((point) => point.y)),
+      }
+    : null;
+  const clusterWidth = cluster ? cluster.maxX - cluster.minX : 0;
+  const clusterHeight = cluster ? cluster.maxY - cluster.minY : 0;
+  const grid = (columns: number) => ({
+    width: (columns - 1) * UNCONNECTED_COLUMN_STEP,
+    height: (Math.ceil(nodes.length / columns) - 1) * UNCONNECTED_ROW_STEP,
+  });
+  let best = { below: false, columns: 1, scale: -1 };
+  for (const below of cluster ? [false, true] : [false]) {
+    for (let columns = 1; columns <= nodes.length; columns++) {
+      const { width, height } = grid(columns);
+      const spanWidth = !cluster
+        ? width
+        : below
+          ? Math.max(clusterWidth, width)
+          : clusterWidth + UNCONNECTED_GAP + width;
+      const spanHeight = !cluster
+        ? height
+        : below
+          ? clusterHeight + UNCONNECTED_GAP + height
+          : Math.max(clusterHeight, height);
+      // The scale at which the whole drawing fits a frame of this aspect.
+      const scale = Math.min(
+        aspect / Math.max(320, spanWidth + MARGIN_X),
+        1 / Math.max(240, spanHeight + MARGIN_Y),
+      );
+      if (scale > best.scale + 1e-12) best = { below, columns, scale };
+    }
   }
-  const width = Math.max(320, maxX - minX + 220);
-  const height = Math.max(240, maxY - minY + 160);
-  for (const position of positions.values()) {
-    position.x += (width - maxX - minX) / 2;
-    position.y += (height - maxY - minY) / 2;
-  }
-  return { positions, width, height };
+  const { below, columns } = best;
+  const { width, height } = grid(columns);
+  const left = !cluster
+    ? -width / 2
+    : below
+      ? (cluster.minX + cluster.maxX - width) / 2
+      : cluster.maxX + UNCONNECTED_GAP;
+  const top = !cluster
+    ? -height / 2
+    : below
+      ? cluster.maxY + UNCONNECTED_GAP
+      : (cluster.minY + cluster.maxY - height) / 2;
+  nodes.forEach((node, index) => {
+    positions.set(node.key, {
+      x: left + (index % columns) * UNCONNECTED_COLUMN_STEP,
+      y: top + Math.floor(index / columns) * UNCONNECTED_ROW_STEP,
+    });
+  });
 }
 
 export interface Camera {

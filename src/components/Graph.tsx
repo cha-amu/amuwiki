@@ -46,7 +46,6 @@ export function Graph({
     () => selectGraph(graph, scope, focus),
     [graph, scope, focus],
   );
-  const layout = useMemo(() => layoutGraph(selected, focus), [selected, focus]);
   const container = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 500, height: 320 });
@@ -62,6 +61,16 @@ export function Graph({
   // Small embeds reserve screen-space margins for readable labels and controls;
   // merely scaling the entire desktop drawing can clip a label at 190px wide.
   const drawingHeight = compact ? Math.max(40, size.height - 42) : size.height;
+  // Unconnected items sit beside or below the rest, whichever suits this frame;
+  // a quarter step keeps small resizes from rearranging the map.
+  const aspect = Math.max(
+    0.25,
+    Math.round((size.width / drawingHeight) * 4) / 4,
+  );
+  const layout = useMemo(
+    () => layoutGraph(selected, focus, aspect),
+    [selected, focus, aspect],
+  );
   // Compact labels and the compact drawing scale are planned together, in
   // screen pixels under the initial camera (see domain/labels.ts).
   const compactPlan = useMemo(
